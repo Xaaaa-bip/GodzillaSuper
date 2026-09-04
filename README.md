@@ -4,11 +4,8 @@
 
 
 
-
-<img width="1031" height="1449" alt="微信图片_20260902100837_148_29" src="https://github.com/user-attachments/assets/4e02bc6f-b2e2-4a8b-ab23-655ac9a5a83a" />
-
-
-
+加微信好友要这个人拉你进群
+<img width="888" height="1131" alt="2e6ac2fc81fbe39d96b94d547f08e5c9" src="https://github.com/user-attachments/assets/dfbf9b57-0f83-4fef-8614-92fc1e88c1ca" />
 
 
 ## 目录

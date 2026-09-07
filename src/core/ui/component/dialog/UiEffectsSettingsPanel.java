@@ -108,6 +108,7 @@ public class UiEffectsSettingsPanel extends JPanel {
 
     private void pickWallpaper() {
         JFileChooser fc = new JFileChooser();
+        SafeFileSystemView.apply(fc);
         fc.setFileFilter(new FileNameExtensionFilter(
                 "Images (png,jpg,jpeg,gif,bmp)", "png", "jpg", "jpeg", "gif", "bmp"));
         fc.setDialogTitle("\u9009\u62e9\u58c1\u7eb8\u56fe\u7247");

@@ -14,7 +14,6 @@ import core.imp.Payload;
 import core.shell.GFile;
 import core.shell.ShellEntity;
 import core.ui.component.annotation.ButtonToMenuItem;
-import core.ui.component.annotation.ClickSyncAnnotation;
 import core.ui.component.dialog.FileAtt;
 import core.ui.component.dialog.FileDialog2;
 import core.ui.component.dialog.GFileChooser;
@@ -65,6 +64,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
 import javax.swing.TransferHandler;
 import javax.swing.border.Border;
 import javax.swing.border.TitledBorder;
@@ -141,6 +141,8 @@ public class ShellFileManager extends JPanel {
     private final Payload payload;
     private final Encoding encoding;
     private final TitledBorder titledBorder;
+    private final AtomicBoolean listingBusy = new AtomicBoolean(false);
+    private final AtomicBoolean executeBusy = new AtomicBoolean(false);
 
     public ShellFileManager(ShellEntity entity) {
         this.titledBorder = BorderFactory.createTitledBorder((Border)null, String.format(TITLED_FORMAT, 0, 0, 0), 0, 0, (Font)null, (Color)null);
@@ -156,17 +158,31 @@ public class ShellFileManager extends JPanel {
     }
 
     public void init(ShellEntity shellEntity) {
-        String[] fileRoot = this.payload.listFileRoot();
-        if (fileRoot != null) {
-            for(int i = 0; i < fileRoot.length; ++i) {
-                this.fileDataTree.AddNote(fileRoot[i]);
+        this.titledBorder.setTitle("\u52a0\u8f7d\u4e2d...");
+        (new Thread(() -> {
+            String[] fileRoot = null;
+            String webDir = "/";
+            try {
+                fileRoot = this.payload.listFileRoot();
+                webDir = functions.formatDir(this.payload.getWebDir());
+            } catch (Throwable t) {
+                Log.error(t);
             }
-        }
-
-        this.currentDir = functions.formatDir(this.payload.getWebDir());
-        this.currentDir = StringUtils.isEmpty(this.currentDir) ? "/" : this.currentDir.substring(0, 1).toUpperCase() + this.currentDir.substring(1);
-        this.dirField.setText(this.currentDir);
-        this.fileDataTree.AddNote(this.currentDir);
+            final String[] roots = fileRoot;
+            final String dir = StringUtils.isEmpty(webDir) ? "/" : webDir.substring(0, 1).toUpperCase() + webDir.substring(1);
+            SwingUtilities.invokeLater(() -> {
+                if (roots != null) {
+                    for (int i = 0; i < roots.length; ++i) {
+                        this.fileDataTree.AddNote(roots[i]);
+                    }
+                }
+                this.currentDir = dir;
+                this.dirField.setText(this.currentDir);
+                this.fileDataTree.AddNote(this.currentDir);
+                this.titledBorder.setTitle(String.format(TITLED_FORMAT, 0, 0, 0));
+                this.jSplitPane2.updateUI();
+            });
+        }, "gsl5-file-init")).start();
     }
 
     private void InitJPanel() {
@@ -320,7 +336,7 @@ public class ShellFileManager extends JPanel {
     }
 
     public void dataViewDbClick(MouseEvent e) {
-        this.editFileInEditFileFrameButtonClick((ActionEvent)null);
+        this.runFileIo(() -> this.editFileInEditFileFrameButtonClick((ActionEvent)null));
     }
 
     public void editFileNewWindowButtonClick(ActionEvent e) {
@@ -397,7 +413,6 @@ public class ShellFileManager extends JPanel {
 
     }
 
-    @ClickSyncAnnotation
     public void fileDataTreeDbClick(MouseEvent e) {
         this.refreshFile(this.fileDataTree.GetSelectFile());
     }
@@ -532,27 +547,65 @@ public class ShellFileManager extends JPanel {
     }
 
     public void executeFileButtonClick(ActionEvent e) {
-        String fileString = this.getSelectdFile();
-        String inputFile = GOptionPane.showInputDialog("\u8f93\u5165\u53ef\u6267\u884c\u6587\u4ef6\u540d\u79f0", fileString);
-        if (inputFile != null) {
-            final String cmdString;
-            if (!this.payload.isWindows()) {
-                cmdString = String.format("chmod +x %s && nohup %s > /dev/null", inputFile, inputFile);
-            } else {
-                cmdString = String.format("start %s ", inputFile);
-            }
-
-            (new Thread(new Runnable() {
-                public void run() {
-                    Log.log(String.format("Execute Command Start As %s", cmdString));
-                    String result = ShellFileManager.this.payload.execCommand(cmdString);
-                    Log.log(String.format("execute Command End %s", result));
-                }
-            })).start();
-        } else {
-            Log.log("\u7528\u6237\u53d6\u6d88\u9009\u62e9.....");
+        if (!this.executeBusy.compareAndSet(false, true)) {
+            GOptionPane.showMessageDialog(UiFunction.getParentFrame(this), "\u6b63\u5728\u6267\u884c\uff0c\u8bf7\u7a0d\u5019", "\u63d0\u793a", 1);
+            return;
         }
+        try {
+            String fileString = this.getSelectdFile();
+            String inputFile = GOptionPane.showInputDialog("\u8f93\u5165\u53ef\u6267\u884c\u6587\u4ef6\u540d\u79f0", fileString);
+            if (inputFile == null) {
+                Log.log("\u7528\u6237\u53d6\u6d88\u9009\u62e9.....");
+                return;
+            }
+            String cmdString = this.buildDetachedExecuteCommand(inputFile);
+            Log.log(String.format("Execute Command Start As %s", cmdString));
+            String result = this.payload.execCommand(cmdString);
+            Log.log(String.format("execute Command End %s", result));
+            final String shown = result == null ? "" : result.trim();
+            if (shown.length() > 0) {
+                SwingUtilities.invokeLater(() -> GOptionPane.showMessageDialog(UiFunction.getParentFrame(this),
+                        shown.length() > 800 ? shown.substring(0, 800) + "..." : shown, "\u6267\u884c\u7ed3\u679c", 1));
+            }
+        } catch (Throwable t) {
+            Log.error(t);
+            final String msg = t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage();
+            SwingUtilities.invokeLater(() -> GOptionPane.showMessageDialog(UiFunction.getParentFrame(this),
+                    "\u6267\u884c\u4e2d\u65ad: " + msg, "\u63d0\u793a", 2));
+        } finally {
+            this.executeBusy.set(false);
+        }
+    }
 
+    private String buildDetachedExecuteCommand(String inputFile) {
+        String raw = inputFile == null ? "" : inputFile.trim();
+        if (!this.payload.isWindows()) {
+            String quoted = quoteShellArg(raw);
+            return "chmod +x " + quoted + " && nohup " + quoted + " >/dev/null 2>&1 &";
+        }
+        String lower = raw.toLowerCase();
+        if (lower.startsWith("cmd") || lower.startsWith("start ") || lower.startsWith("powershell")) {
+            return raw;
+        }
+        return "cmd.exe /c start \"\" " + quoteWinArg(raw);
+    }
+
+    private static String quoteWinArg(String path) {
+        if (path == null) {
+            return "\"\"";
+        }
+        String p = path.trim();
+        if (p.startsWith("\"") && p.endsWith("\"") && p.length() >= 2) {
+            return p;
+        }
+        return "\"" + p.replace("\"", "\\\"") + "\"";
+    }
+
+    private static String quoteShellArg(String path) {
+        if (path == null) {
+            return "''";
+        }
+        return "'" + path.replace("'", "'\"'\"'") + "'";
     }
 
     public void downloadButtonClick(ActionEvent e) {
@@ -630,6 +683,18 @@ public class ShellFileManager extends JPanel {
         return s;
     }
 
+    private void onEdt(Runnable task) {
+        if (SwingUtilities.isEventDispatchThread()) {
+            task.run();
+        } else {
+            try {
+                SwingUtilities.invokeAndWait(task);
+            } catch (Exception e) {
+                SwingUtilities.invokeLater(task);
+            }
+        }
+    }
+
     private Vector<Vector<Object>> getAllFile(String filePathString) {
         filePathString = functions.formatDir(filePathString);
         GFile[] files = null;
@@ -639,7 +704,8 @@ public class ShellFileManager extends JPanel {
         } catch (Exception var12) {
             var12.printStackTrace();
             Log.error(var12);
-            GOptionPane.showMessageDialog((Component)null, var12.getMessage());
+            final String msg = var12.getMessage();
+            this.onEdt(() -> GOptionPane.showMessageDialog((Component)null, msg));
             return null;
         }
 
@@ -649,24 +715,24 @@ public class ShellFileManager extends JPanel {
         long allFileSize = 0L;
 
         Vector rows;
+        java.util.List<String> dirNotes = new java.util.ArrayList<String>();
         try {
             if (files == null || files.length <= 0) {
-                GOptionPane.showMessageDialog((Component)null, "\u65e0\u6cd5\u89e3\u6790\u8fd4\u56de\u7684\u6570\u636e");
+                this.onEdt(() -> GOptionPane.showMessageDialog((Component)null, "\u65e0\u6cd5\u89e3\u6790\u8fd4\u56de\u7684\u6570\u636e"));
                 return null;
             }
 
             rows = new Vector();
             String currentDir = functions.formatDir(files[0].getPath());
-            this.fileDataTree.AddNote(currentDir);
-            this.dirField.setText(currentDir);
             this.currentDir = currentDir;
+            dirNotes.add(currentDir);
 
             for(int i = 1; i < files.length; ++i) {
                 GFile file = files[i];
                 Vector<Object> row = new Vector();
                 if (file.isDirectory()) {
                     row.add(this.dirIcon);
-                    this.fileDataTree.AddNote(file.getAbsolutePath());
+                    dirNotes.add(file.getAbsolutePath());
                     ++dirCount;
                 } else {
                     allFileSize += file.length();
@@ -683,34 +749,89 @@ public class ShellFileManager extends JPanel {
             }
         } catch (Throwable var13) {
             var13.printStackTrace();
-            GOptionPane.showMessageDialog((Component)null, var13.getMessage());
+            final String msg = var13.getMessage();
+            this.onEdt(() -> GOptionPane.showMessageDialog((Component)null, msg));
             return null;
         }
 
-        this.titledBorder.setTitle(String.format(TITLED_FORMAT, fileCount, dirCount, (new FileInfo(allFileSize)).toString()));
-        this.jSplitPane2.updateUI();
+        final int fc = fileCount;
+        final int dc = dirCount;
+        final long sz = allFileSize;
+        final String shownDir = this.currentDir;
+        this.onEdt(() -> {
+            this.dirField.setText(shownDir);
+            for (String note : dirNotes) {
+                this.fileDataTree.AddNote(note);
+            }
+            this.titledBorder.setTitle(String.format(TITLED_FORMAT, fc, dc, (new FileInfo(sz)).toString()));
+            this.jSplitPane2.updateUI();
+        });
         return rows;
     }
 
-    private synchronized void refreshFile(String filePathString) {
-        Vector<Vector<Object>> rowsVector = this.getAllFile(filePathString);
-        this.dataView.AddRows(rowsVector);
-        this.dataView.getColumnModel().getColumn(0).setMaxWidth(35);
-        this.dataView.getModel().fireTableDataChanged();
+    private void runFileIo(Runnable task) {
+        if (SwingUtilities.isEventDispatchThread()) {
+            (new Thread(task, "gsl5-file-io")).start();
+        } else {
+            task.run();
+        }
+    }
+
+    private void refreshFile(String filePathString) {
+        if (!this.listingBusy.compareAndSet(false, true)) {
+            GOptionPane.showMessageDialog(UiFunction.getParentFrame(this), "\u6b63\u5728\u52a0\u8f7d\u76ee\u5f55\uff0c\u8bf7\u7a0d\u5019", "\u63d0\u793a", 1);
+            return;
+        }
+        final String path = filePathString;
+        this.titledBorder.setTitle("\u52a0\u8f7d\u4e2d: " + path);
+        this.jSplitPane2.updateUI();
+        this.runFileIo(() -> {
+            Vector<Vector<Object>> rowsVector = null;
+            Throwable error = null;
+            try {
+                rowsVector = this.getAllFile(path);
+            } catch (Throwable t) {
+                error = t;
+                Log.error(t);
+            }
+            final Vector<Vector<Object>> rows = rowsVector;
+            final Throwable fail = error;
+            SwingUtilities.invokeLater(() -> {
+                try {
+                    if (rows != null) {
+                        this.dataView.AddRows(rows);
+                        this.dataView.getColumnModel().getColumn(0).setMaxWidth(35);
+                        this.dataView.getModel().fireTableDataChanged();
+                    } else if (fail != null) {
+                        GOptionPane.showMessageDialog(UiFunction.getParentFrame(this),
+                                "\u6253\u5f00\u5931\u8d25: " + (fail.getMessage() == null ? fail.getClass().getSimpleName() : fail.getMessage()),
+                                "\u63d0\u793a", 2);
+                    }
+                } finally {
+                    this.listingBusy.set(false);
+                    this.jSplitPane2.updateUI();
+                }
+            });
+        });
     }
 
     private void GUploadFile(boolean bigFileUpload) {
-        FileOpertionInfo fileOpertionInfo = FileDialog2.showFileOpertion(this.shellEntity.getFrame(), "upload", "", "");
-        if (fileOpertionInfo.getOpertionStatus() && fileOpertionInfo.getSrcFileName().trim().length() > 0 && fileOpertionInfo.getDestFileName().trim().length() > 0) {
-            if (fileOpertionInfo.getDestFileName().length() > 0) {
-                this.uploadFile(fileOpertionInfo.getDestFileName(), new File(fileOpertionInfo.getSrcFileName()), bigFileUpload);
-            } else {
-                GOptionPane.showMessageDialog(UiFunction.getParentFrame(this), "\u4e0a\u4f20\u8def\u5f84\u4e3a\u7a7a", "\u63d0\u793a", 2);
-            }
-        } else {
-            GOptionPane.showMessageDialog(UiFunction.getParentFrame(this), "\u4fe1\u606f\u586b\u5199\u4e0d\u5b8c\u6574", "\u63d0\u793a", 2);
+        String destHint = this.currentDir == null ? "" : functions.formatDir(this.currentDir);
+        FileOpertionInfo fileOpertionInfo = FileDialog2.showFileOpertion(this.shellEntity.getFrame(), "upload", "", destHint);
+        if (fileOpertionInfo.getOpertionStatus() == null || !fileOpertionInfo.getOpertionStatus().booleanValue()) {
+            return;
         }
-
+        String src = fileOpertionInfo.getSrcFileName() == null ? "" : fileOpertionInfo.getSrcFileName().trim();
+        String dest = fileOpertionInfo.getDestFileName() == null ? "" : fileOpertionInfo.getDestFileName().trim();
+        if (src.isEmpty() || dest.isEmpty()) {
+            GOptionPane.showMessageDialog(UiFunction.getParentFrame(this), "\u4e0a\u4f20\u8def\u5f84\u4e3a\u7a7a", "\u63d0\u793a", 2);
+            return;
+        }
+        File local = new File(src);
+        if ((dest.endsWith("/") || dest.endsWith("\\")) && local.getName().length() > 0) {
+            dest = dest + local.getName();
+        }
+        this.uploadFile(dest, local, bigFileUpload);
     }
 
     private void UploadFile(boolean bigFileUpload) {
@@ -719,8 +840,6 @@ public class ShellFileManager extends JPanel {
         if (selectdFile != null) {
             String uploadFileString = this.currentDir + selectdFile.getName();
             this.uploadFile(uploadFileString, selectdFile, bigFileUpload);
-        } else {
-            GOptionPane.showMessageDialog(UiFunction.getParentFrame(this), "\u4fe1\u606f\u586b\u5199\u4e0d\u5b8c\u6574", "\u63d0\u793a", 2);
         }
 
     }
@@ -749,6 +868,7 @@ public class ShellFileManager extends JPanel {
 
         if (state) {
             GOptionPane.showMessageDialog(UiFunction.getParentFrame(this), "\u4e0a\u4f20\u6210\u529f", "\u63d0\u793a", 1);
+            this.refreshFile(this.currentDir);
         } else {
             GOptionPane.showMessageDialog(UiFunction.getParentFrame(this), "\u4e0a\u4f20\u5931\u8d25", "\u63d0\u793a", 2);
         }
@@ -759,15 +879,16 @@ public class ShellFileManager extends JPanel {
     private void GDownloadFile(boolean bigFileDownload) {
         String file = this.getSelectdFile();
         FileOpertionInfo fileOpertionInfo = FileDialog2.showFileOpertion(this.shellEntity.getFrame(), "download", file, "");
-        if (fileOpertionInfo.getOpertionStatus() && fileOpertionInfo.getSrcFileName().trim().length() > 0 && fileOpertionInfo.getDestFileName().trim().length() > 0) {
-            if (fileOpertionInfo.getDestFileName().length() > 0) {
-                this.downloadFile(fileOpertionInfo.getSrcFileName(), new File(fileOpertionInfo.getDestFileName()), bigFileDownload);
-            } else {
-                GOptionPane.showMessageDialog(UiFunction.getParentFrame(this), "\u4e0b\u8f7d\u8def\u5f84\u4e3a\u7a7a", "\u63d0\u793a", 2);
-            }
-        } else {
-            GOptionPane.showMessageDialog(UiFunction.getParentFrame(this), "\u4fe1\u606f\u586b\u5199\u4e0d\u5b8c\u6574", "\u63d0\u793a", 2);
+        if (fileOpertionInfo.getOpertionStatus() == null || !fileOpertionInfo.getOpertionStatus().booleanValue()) {
+            return;
         }
+        String src = fileOpertionInfo.getSrcFileName() == null ? "" : fileOpertionInfo.getSrcFileName().trim();
+        String dest = fileOpertionInfo.getDestFileName() == null ? "" : fileOpertionInfo.getDestFileName().trim();
+        if (src.isEmpty() || dest.isEmpty()) {
+            GOptionPane.showMessageDialog(UiFunction.getParentFrame(this), "\u4e0b\u8f7d\u8def\u5f84\u4e3a\u7a7a", "\u63d0\u793a", 2);
+            return;
+        }
+        this.downloadFile(src, new File(dest), bigFileDownload);
 
     }
 
@@ -784,8 +905,6 @@ public class ShellFileManager extends JPanel {
                 }
 
                 this.downloadFile(srcFile, selectdFile, bigFileDownload);
-            } else {
-                GOptionPane.showMessageDialog(UiFunction.getParentFrame(this), "\u4fe1\u606f\u586b\u5199\u4e0d\u5b8c\u6574", "\u63d0\u793a", 2);
             }
         } else {
             GOptionPane.showMessageDialog(UiFunction.getParentFrame(this), "\u672a\u9009\u4e2d\u4e0b\u8f7d\u6587\u4ef6", "\u63d0\u793a", 2);

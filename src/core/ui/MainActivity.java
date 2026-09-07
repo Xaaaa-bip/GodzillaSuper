@@ -77,6 +77,7 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.JComponent;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JTable;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
@@ -451,6 +452,9 @@ public class MainActivity extends JFrame {
                 if (!e.isControlDown()) {
                     return false;
                 }
+                if (isTextInputFocus()) {
+                    return false;
+                }
                 if (e.getKeyCode() == KeyEvent.VK_C) {
                     if (shellView.getSelectedRowCount() > 0) {
                         SwingUtilities.invokeLater(() -> exportSelectedShells());
@@ -463,6 +467,22 @@ public class MainActivity extends JFrame {
                 return false;
             }
         });
+    }
+
+    /** Do not steal Ctrl+C/V from path fields, editors, or combo boxes. */
+    private static boolean isTextInputFocus() {
+        Component c = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+        while (c != null) {
+            if (c instanceof javax.swing.text.JTextComponent) {
+                javax.swing.text.JTextComponent t = (javax.swing.text.JTextComponent) c;
+                return t.isEnabled() && t.isEditable();
+            }
+            if (c instanceof JComboBox && ((JComboBox<?>) c).isEditable()) {
+                return true;
+            }
+            c = c.getParent();
+        }
+        return false;
     }
 
     private static boolean isChildWindowOf(Window child, Window parent) {
@@ -1419,6 +1439,7 @@ public class MainActivity extends JFrame {
     }
 
     public static void initUi() {
+        core.ui.component.dialog.SafeFileSystemView.install();
         if (SystemInfo.isMacOS && System.getProperty("apple.laf.useScreenMenuBar") == null) {
             System.setProperty("apple.laf.useScreenMenuBar", "false");
         }
@@ -1438,48 +1459,8 @@ public class MainActivity extends JFrame {
 
     public static void main(String[] args) {
         if (args.length >= 1 && "mcp".equals(args[0])) {
-            // Headless mode: must be set BEFORE any AWT/Swing class loading, or Linux headless env will NPE on Font.
-            // Only force headless when the environment truly has no display; on desktop keep AWT so shell ops work.
-            if (java.awt.GraphicsEnvironment.isHeadless()) {
-                System.setProperty("java.awt.headless", "true");
-            }
-            int p = 9123;
-            String bindHost = "0.0.0.0";
-            // args: mcp [port] [bindHost]
-            // also: mcp 0.0.0.0:9123  or  mcp 192.168.1.10:9123
-            // auth: env GSL5_MCP_TOKEN or profile/mcp.token (auto-generated)
-            if (args.length >= 2) {
-                String a1 = args[1] == null ? "" : args[1].trim();
-                if (a1.contains(":") && !a1.matches("^\\d+$")) {
-                    int idx = a1.lastIndexOf(':');
-                    bindHost = a1.substring(0, idx);
-                    try { p = Integer.parseInt(a1.substring(idx + 1)); } catch (Exception ignored) {}
-                } else {
-                    try {
-                        p = Integer.parseInt(a1);
-                    } catch (Exception ignored) {
-                        if (!a1.isEmpty()) bindHost = a1;
-                    }
-                }
-            }
-            if (args.length >= 3) {
-                String a2 = args[2] == null ? "" : args[2].trim();
-                if (!a2.isEmpty()) bindHost = a2;
-            }
-            try {
-                Class.forName("core.ApplicationContext", true, Thread.currentThread().getContextClassLoader());
-            } catch (Exception e) {
-                Log.error(e);
-                System.exit(1);
-            }
-            try {
-                Class<?> cls = Class.forName("shells.plugins.generic.McpService");
-                java.lang.reflect.Method m = cls.getMethod("startHeadless", Integer.TYPE, String.class);
-                m.invoke(null, p, bindHost);
-            } catch (Exception e) {
-                Log.error(e);
-                System.exit(1);
-            }
+            // Prefer java -jar (core.Gsl5Main): that class is not a JFrame, so Linux without DISPLAY can start.
+            core.Gsl5Main.main(args);
             return;
         }
         try {

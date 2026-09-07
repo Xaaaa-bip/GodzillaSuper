@@ -3,7 +3,7 @@ package shells.plugins.java;
 import core.annotation.PluginAnnotation;
 import shells.plugins.generic.ShellcodeLoader;
 
-@PluginAnnotation(Name = "�ۺϲ��", payloadName = "JavaDynamicPayload", DisplayName = "�ۺϲ��")
+@PluginAnnotation(Name = "综合插件", payloadName = "JavaDynamicPayload", DisplayName = "综合插件")
 
 public class NewCmd extends shells.plugins.generic.NewCmd {
     public NewCmd() {

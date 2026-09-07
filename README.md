@@ -107,6 +107,15 @@ gsl/
 
 ## 更新日志
 
+### 3.1.7.1（2026-09-07）
+- **生成窗口**：运行时 / 算法 / 后缀 / 混淆 / C2 模板集中在一个「生成」表单，不再连环弹窗
+- **综合插件乱码修复**：界面中文恢复；RDP 改为本机 `reg` / `netsh` 命令，不再投放 `StartRdp.exe`
+- 文件管理执行改为 `cmd.exe /c start`；按钮防连点
+- aspx/ashx 生成只替换 stub 内密码密钥；asmx/soap 才替换包装层占位符
+- ASPX 混淆不再插入会破坏编译的不可见字符
+- MCP 补齐数据库工具（连接 / 库表 / 预览 / 执行 / 已存配置）
+- `execCommand` 不再无脑重试；Mimikatz 仍走原来的 `runPe2`
+
 ### 3.1.7（2026-08-21）
 - **C2 流量伪装容器链（新）**：新增 `pngidat` / `pdfstream` / `gifdata` 三个加密链，请求保持裸密文，响应伪装为结构合法的 PNG（密文藏 IDAT 图像数据区）/ PDF（FlateDecode 流 + 正确 xref 偏移）/ GIF（LZW 光栅）文件
 - 随机图像尺寸、随机分块、随机陪衬 chunk（gAMA/tEXt），每个数据包形态不同
@@ -240,7 +249,8 @@ java -jar bin/gsl5.jar mcp 192.168.1.10:9123
 然后在 Claude / Codex 的 MCP 配置中添加（详见 [MCP 服务](#mcp-服务ai-操控)）。
 
 ### 4. 下载预编译 Release
-- **3.1.7（最新）**：C2 流量伪装容器链（PNG/PDF/GIF）+ MCP 免弹窗修复 + 报错弹窗布局修复 — [Release](https://github.com/Xaaaa-bip/GodzillaSuper/releases/tag/3.1.7) · [jar](https://github.com/Xaaaa-bip/GodzillaSuper/releases/download/3.1.7/gsl5.jar)
+- **3.1.7.1（最新）**：生成窗口免弹窗 + 综合插件乱码修复 + 文件管理执行/防连点 + MCP 数据库工具 — [Release](https://github.com/Xaaaa-bip/GodzillaSuper/releases/tag/3.1.7.1) · [jar](https://github.com/Xaaaa-bip/GodzillaSuper/releases/download/3.1.7.1/gsl5.jar)
+- **3.1.7**：C2 流量伪装容器链（PNG/PDF/GIF）+ MCP 免弹窗修复 + 报错弹窗布局修复 — [Release](https://github.com/Xaaaa-bip/GodzillaSuper/releases/tag/3.1.7) · [jar](https://github.com/Xaaaa-bip/GodzillaSuper/releases/download/3.1.7/gsl5.jar)
 - **3.1.6**：口字修复 + 超级混淆解析错误修复 + MCP 生成免弹窗（obfuscation 6 变体）+ 移除 RASP — [Release](https://github.com/Xaaaa-bip/GodzillaSuper/releases/tag/3.1.6) · [jar](https://github.com/Xaaaa-bip/GodzillaSuper/releases/download/3.1.6/gsl5.jar)
 - **3.1.5**：PHP 混淆乱码修复 + MCP 插件工具（`@McpTool` 10 个工具，全部内存加载）+ shell_info 补全— [Release](https://github.com/Xaaaa-bip/GodzillaSuper/releases/tag/3.1.5) · [jar](https://github.com/Xaaaa-bip/GodzillaSuper/releases/download/3.1.5/gsl5.jar)
 - **3.1.4**：检查更新 + 菜单优化 — [Release](https://github.com/Xaaaa-bip/GodzillaSuper/releases/tag/3.1.4) · [jar](https://github.com/Xaaaa-bip/GodzillaSuper/releases/download/3.1.4/gsl5.jar)

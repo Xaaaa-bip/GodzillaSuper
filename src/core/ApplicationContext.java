@@ -235,7 +235,7 @@ public class ApplicationContext {
     public static final String VERSION = "4.15";
 
     /** GSL release tag, checked against GitHub latest for update notification. */
-    public static final String RELEASE_TAG = "3.1.7";
+    public static final String RELEASE_TAG = "3.1.7.1";
 
 
 
@@ -271,7 +271,7 @@ public class ApplicationContext {
 
 
 
-    public static boolean asyncClick = false;
+    public static boolean asyncClick = true;
 
 
 
@@ -327,7 +327,10 @@ public class ApplicationContext {
 
 
 
-        RTextArea.initialized();
+        try {
+            RTextArea.initialized();
+        } catch (Throwable ignored) {
+        }
 
 
 
@@ -422,7 +425,9 @@ public class ApplicationContext {
 
 
 
-        MainActivity.setPluginMenuFont(font);
+        if (!isHeadlessMode()) {
+            MainActivity.setPluginMenuFont(font);
+        }
 
 
 
@@ -3398,131 +3403,55 @@ return true;
 
 
 
+    /** Property-only check so MCP can skip Swing before AWT initializes. */
+    public static boolean isHeadlessMode() {
+        return Boolean.parseBoolean(System.getProperty("java.awt.headless", "false"));
+    }
+
+
+
     static {
 
 
 
-        try {
-
-
-
-            windowWidth = Toolkit.getDefaultToolkit().getScreenSize().width;
-
-
-
-            windowsHeight = Toolkit.getDefaultToolkit().getScreenSize().height;
-
-
-
-        } catch (Throwable var4) {
-
-
-
-        }
-
-
-
-
-
-
-
-        try {
-
-
-
-            JFrame frame = new JFrame();
-
-
-
-            frame.setSize(1, 1);
-
-
-
-            JLabel label = new JLabel("\u5b57\u4f53\u521d\u59cb\u5316! (font init!)");
-
-
-
-            frame.add(label);
-
-
-
-            frame.setDefaultCloseOperation(2);
-
-
-
-            frame.setVisible(true);
-
-
-
-            functions.sleep(20L);
-
-
-
-            frame.setVisible(false);
-
-
-
-            frame.dispose();
-
-
-
-            systemDefaultFont = label.getFont();
-
-
-
-            if (systemDefaultFont == null) {
-
-
-
-                systemDefaultFont = Font.decode("default");
-
-
-
-            } else {
-
-
-
-                systemDefaultFont = new Font(systemDefaultFont.getName(), 0, systemDefaultFont.getSize() + 1);
-
-
-
+        if (!isHeadlessMode()) {
+            try {
+                windowWidth = Toolkit.getDefaultToolkit().getScreenSize().width;
+                windowsHeight = Toolkit.getDefaultToolkit().getScreenSize().height;
+            } catch (Throwable var4) {
             }
-
-
-
-        } catch (Throwable var3) {
-
-
-
+            try {
+                JFrame frame = new JFrame();
+                frame.setSize(1, 1);
+                JLabel label = new JLabel("\u5b57\u4f53\u521d\u59cb\u5316! (font init!)");
+                frame.add(label);
+                frame.setDefaultCloseOperation(2);
+                frame.setVisible(true);
+                functions.sleep(20L);
+                frame.setVisible(false);
+                frame.dispose();
+                systemDefaultFont = label.getFont();
+                if (systemDefaultFont == null) {
+                    systemDefaultFont = Font.decode("default");
+                } else {
+                    systemDefaultFont = new Font(systemDefaultFont.getName(), 0, systemDefaultFont.getSize() + 1);
+                }
+            } catch (Throwable var3) {
+            }
+        } else {
+            try {
+                systemDefaultFont = Font.decode("default");
+            } catch (Throwable ignored) {
+            }
         }
-
-
-
-
 
 
 
         try {
-
-
-
             init();
-
-
-
         } catch (Throwable var2) {
-
-
-
             var2.printStackTrace();
-
-
-
         }
-
-
-
-
 
 
 

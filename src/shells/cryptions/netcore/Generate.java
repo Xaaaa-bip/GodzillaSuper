@@ -23,7 +23,6 @@ class Generate {
                 inputStream2.close();
                 data = template.replace("{code}", code2).getBytes("UTF-8");
             } else {
-                // middleware template is self-contained
                 data = code2.getBytes("UTF-8");
             }
         } catch (Exception ex) {

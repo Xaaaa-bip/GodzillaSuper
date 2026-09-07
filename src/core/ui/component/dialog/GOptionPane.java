@@ -18,6 +18,7 @@ import java.io.PrintStream;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.Locale;
 import java.util.Map;
 import javax.swing.Icon;
@@ -68,8 +69,33 @@ public class GOptionPane {
      * Set by McpService.startHeadless so MCP tools never block on UI.
      */
     public static volatile boolean SUPPRESS_UI = false;
+    private static final ThreadLocal<LinkedList<Object>> AUTO_SELECTIONS = new ThreadLocal<LinkedList<Object>>();
+    private static final ThreadLocal<Boolean> SKIP_PROPERTY_DIALOG = new ThreadLocal<Boolean>();
 
     public GOptionPane() {
+    }
+
+    public static void pushAutoSelection(Object value) {
+        LinkedList<Object> queue = AUTO_SELECTIONS.get();
+        if (queue == null) {
+            queue = new LinkedList<Object>();
+            AUTO_SELECTIONS.set(queue);
+        }
+        queue.addLast(value);
+    }
+
+    public static void setSkipPropertyDialog(boolean skip) {
+        SKIP_PROPERTY_DIALOG.set(skip ? Boolean.TRUE : null);
+    }
+
+    public static void clearAutoSelection() {
+        AUTO_SELECTIONS.remove();
+        SKIP_PROPERTY_DIALOG.remove();
+    }
+
+    private static Object takeAutoSelection() {
+        LinkedList<Object> queue = AUTO_SELECTIONS.get();
+        return queue == null || queue.isEmpty() ? null : queue.removeFirst();
     }
 
     public static String showInputDialog(Object message) throws java.awt.HeadlessException {
@@ -93,6 +119,10 @@ public class GOptionPane {
     }
 
     public static Object showInputDialog(Component parentComponent, Object message, String title, int messageType, Icon icon, Object[] selectionValues, Object initialSelectionValue) throws java.awt.HeadlessException {
+        Object auto = takeAutoSelection();
+        if (auto != null) {
+            return auto;
+        }
         if (SUPPRESS_UI) {
             Log.error("GOptionPane.showInputDialog (suppressed): " + message);
             return null;
@@ -256,7 +286,7 @@ public class GOptionPane {
     }
 
     public static void showUpdateObjectPropertyDialog(Object object) {
-        if (SUPPRESS_UI) {
+        if (Boolean.TRUE.equals(SKIP_PROPERTY_DIALOG.get()) || SUPPRESS_UI) {
             Log.error("GOptionPane.showUpdateObjectPropertyDialog (suppressed): " + object);
             return;
         }

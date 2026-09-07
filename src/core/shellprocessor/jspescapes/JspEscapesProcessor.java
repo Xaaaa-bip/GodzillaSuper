@@ -260,6 +260,10 @@ public class JspEscapesProcessor implements ShellProcessor {
         Arrays.sort(METHODS);
     }
 
+    public static String[] listEscapeMethods() {
+        return METHODS.clone();
+    }
+
     public static class EscapesOptions {
         public String escapeMethod;
         public boolean isAppendLitter;

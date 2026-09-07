@@ -24,6 +24,7 @@ public class Gsl5Main {
             startMcp(args);
             return;
         }
+        core.ui.component.dialog.SafeFileSystemView.install();
         core.ui.MainActivity.main(args);
     }
 

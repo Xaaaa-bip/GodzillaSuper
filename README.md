@@ -53,12 +53,18 @@
 - 团队多数据源协作（单机 / UNC / PostgreSQL）
 - MCP Bearer Token 鉴权 + CLI 自动写配置 + Linux headless 支持（3.1.3）
 - 检查更新（3.1.4）
+- C2 流量伪装容器链：PNG / PDF / GIF（3.1.7）
+- 达梦 DM8 / 人大金仓 KingbaseES 数据库支持，内置驱动按需上传（3.1.8）
+- PHP 无 exec 环境命令执行（FastCGI 连本机 php-fpm，不依赖被禁函数）（3.1.8）
+- JDK 6–17 目标端全兼容（下发字节码统一 v50）（3.1.8）
 
 **修复**：
 - PHP 混淆乱码、DisplayName 中文乱码（PHP/JSP/C# 连带修复，3.1.5）
 - 杀软识别名称乱码（3.1.5）
 - PHP 免杀模板 0KB（3.1.1）
 - 命令回显、Shell 加载遮罩竞态（3.1.2）
+- MCP 响应非法 JSON 打断 SSE 连接、`file_search` 丢失整个目录结果（3.1.8）
+- 数据库 UPDATE / DDL 报假失败（`Query OK` 被当错误抛出）（3.1.8）
 
 完整明细见 [更新日志](#更新日志)。
 
@@ -106,6 +112,23 @@ gsl/
 ---
 
 ## 更新日志
+
+### 3.1.8（2026-09-11）
+- **JDK 6–17 全兼容**：下发到目标端的字节码全部降至 v50（`payload.classs`、全部 `modules/*.class`、全部插件 `.classs`），JDK 6 / 11 / 17 真机矩阵（真 Tomcat + 真 JSP + HTTP 联调）全部通过；目标端字符集按 `file.encoding` 自动对齐，不再依赖代码页猜测
+- **达梦 / 人大金仓（新）**：内置达梦 DM8 与 KingbaseES V8 的 JDBC 驱动（均编译为 v50，JDK 6 起可用）、数据库类型、连接串与库表 SQL 模板；连接前自动探测目标端 classpath，缺驱动才按需上传。`db_list_types` 与 GUI 数据库下拉同步支持
+- **PHP 载荷：禁用 exec 环境下的命令执行（新）**：目标 `disable_functions` 禁掉 `exec / passthru / system / shell_exec / popen / proc_open / putenv` 时，载荷转为 FastCGI 客户端连本机 php-fpm（自动发现 socket），通过 `PHP_ADMIN_VALUE` 注入 `sendmail_path` 触发 C 层 `popen` 执行命令，不依赖任何被禁函数、不落地
+- **C# 载荷升级**：`payload.dll` 改写结构特征（原二进制会被按 GodZ 家族特征查杀）；新增 `payloadsrc/`（`NxJob.cs` / `NxTop.cs` / `LY.cs` + `build_payload.bat`）便于自行构建
+- **界面**：新增后渗透插件中心（`PostExPluginHub`，按插件注解自动归类、卡片式切换）、全局色调遮罩（亮度 / 灰度，`UiToneOverlay`）、SVG 图标体系（38 个页签图标）；Shell 分组由 JTree 重构为 JList；文件选择 / 另存为 / 效果设置面板重构；启动模式对话框重写（去掉写死的默认路径与账号）
+- **MCP 工具修复**：
+  - `oplog_query` 等以 `[` 开头的输出此前被当作原始 JSON 直出，产生**非法响应并打断 SSE 连接**（客户端报 `MCP error -3`）
+  - `file_search` 遇到目录列表中文件名为 null 的条目会抛 NPE 并被吞掉，导致**整个目录的搜索结果丢失**；同时改为真正的通配符（`*` / `?`）匹配
+  - `functions.substring` 在空串 / 越界时执行 `substring(0,-1)` 崩溃，把真实错误盖成 `String index out of range: -1`
+  - 无头模式下插件工具（NewCmd / Mimikatz / TH_TOOLS 等）因构造期创建 Swing 组件而全部报 `HeadlessException`，现已可在无头模式使用
+- **MCP**：CLI 启动恢复自动写入 Claude Code / Codex 客户端配置；恢复 Mimikatz 免 frame 执行路径（共享内存加载 + PE→shellcode + 分片上传 + `evalFunc`），不再依赖 GUI
+- **数据库**：目标端 UPDATE / DDL 的成功提示（`Query OK, N rows affected`）不再被当错误抛出，修复 update 型 SQL 全部报假失败；驱动加载改走 TCCL，兼容 JDK 16+ 模块强封装
+- **JarLoader**：无头环境下大 jar 上传 NPE 修复；`jarmembuff://` 在 JDK 16+ 报 unknown protocol 修复
+- **WebSocket 加密器**：模板中硬编码的 AES key 改为 `{secretKey}` 占位符
+- 新增终端适配器 `ShellTerminalAdapter`；修复 `JavaAShell.include` 的 NPE；修复 `shell_create` 走 C2 分支时未替换模板占位符
 
 ### 3.1.7.1（2026-09-07）
 - **生成窗口**：运行时 / 算法 / 后缀 / 混淆 / C2 模板集中在一个「生成」表单，不再连环弹窗

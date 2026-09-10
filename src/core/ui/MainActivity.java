@@ -1666,7 +1666,7 @@ public class MainActivity extends JFrame {
                 }
             }
         }
-        if (scroll > 0) {
+        if (scroll > 0 && this.shellViewScrollPane != null) {
             SwingUtilities.invokeLater(() -> this.shellViewScrollPane.getVerticalScrollBar().setValue(scroll));
         }
     }
@@ -1741,7 +1741,8 @@ public class MainActivity extends JFrame {
     /** 刷新实现：先立即出列表（不含归属地），后台补算归属地，并保持选中与滚动位置。 */
     private void refreshShellViewNow() {
         final String[] keepIds = selectedShellIds();
-        final int keepScroll = this.shellViewScrollPane.getVerticalScrollBar().getValue();
+        final int keepScroll = (this.shellViewScrollPane == null)
+                ? 0 : this.shellViewScrollPane.getVerticalScrollBar().getValue();
         Vector<Vector<String>> rowsVector = Db.getAllShell();
         if (rowsVector == null || rowsVector.isEmpty()) {
             rowsVector = new Vector<Vector<String>>();

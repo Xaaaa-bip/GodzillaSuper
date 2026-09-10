@@ -50,12 +50,18 @@ public final class WallpaperTableStyle {
             return;
         }
         Color tb = UIManager.getColor("Table.background");
-        if (tb != null) {
-            table.setBackground(new Color(tb.getRed(), tb.getGreen(), tb.getBlue(), 18));
-        } else {
-            table.setBackground(new Color(255, 255, 255, 18));
+        // 没有壁纸时不需要半透明包装：直接用不透明主题色，省掉每格一次 alpha 合成（滚动更顺）
+        boolean translucent = true;
+        try {
+            translucent = !core.ui.WallpaperManager.getStoredPathOrEmpty().isEmpty();
+        } catch (Throwable ignored) {
         }
-        table.setOpaque(false);
+        if (tb != null) {
+            table.setBackground(translucent ? new Color(tb.getRed(), tb.getGreen(), tb.getBlue(), 18) : tb);
+        } else {
+            table.setBackground(translucent ? new Color(255, 255, 255, 18) : Color.WHITE);
+        }
+        table.setOpaque(!translucent);
 
         TableColumnModel cm = table.getColumnModel();
         for (int i = 0; i < cm.getColumnCount(); i++) {
@@ -72,8 +78,10 @@ public final class WallpaperTableStyle {
             if (base instanceof DefaultTableCellRenderer) {
                 ((DefaultTableCellRenderer) base).setHorizontalAlignment(SwingConstants.CENTER);
             }
-            if (!(r instanceof TranslucentCellWrapper)) {
+            if (translucent && !(r instanceof TranslucentCellWrapper)) {
                 col.setCellRenderer(new TranslucentCellWrapper(base));
+            } else if (!translucent && r instanceof TranslucentCellWrapper) {
+                col.setCellRenderer(base);
             }
         }
 

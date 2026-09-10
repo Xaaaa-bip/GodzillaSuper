@@ -454,6 +454,8 @@ public class MainActivity extends JFrame {
         bindAutoHidePopup(this.editShell);
         bindAutoHidePopup(this.refreshShell);
         this.shellView.setRightClickMenu(shellViewPopupMenu);
+        // 双击直接打开交互窗口（此前从没绑过，双击没反应）
+        this.shellView.setActionDblClick(ev -> openSelectedShell());
         automaticBindClick.bindMenuItemClick(shellViewPopupMenu, (Map) null, this);
         this.installGenerateDialogAutoCloseListener();
         shellViewPopupMenu.addPopupMenuListener(new PopupMenuListener() {
@@ -519,6 +521,8 @@ public class MainActivity extends JFrame {
         this.applyUiEffectsFromSettings();
         this.installGlobalKeyboardHandler();
         this.installToneOverlay();
+        // 后台预热 IP 库（首次查询要读 ipdb，放 EDT 上会卡）
+        new Thread(() -> IpLocationService.init(), "gsl5-ipdb-warm").start();
         // 先装覆盖层（不抓快照），窗口可见且布局完成后由 windowOpened 触发 start()
         if (ModernUi.isFoldAnimEnabled() && FoldTransition.isAvailable()) {
             this.pendingFold = FoldTransition.foldOpen(this, this.toneOverlay,
@@ -580,6 +584,26 @@ public class MainActivity extends JFrame {
                 } else if (e.getKeyCode() == KeyEvent.VK_V) {
                     SwingUtilities.invokeLater(() -> importShellsFromClipboard());
                     return true;
+                } else if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                    if (shellView.getSelectedRowCount() > 0) {
+                        SwingUtilities.invokeLater(() -> openSelectedShell());
+                        return true;
+                    }
+                } else if (e.getKeyCode() == KeyEvent.VK_DELETE) {
+                    if (shellView.getSelectedRowCount() > 0) {
+                        SwingUtilities.invokeLater(() -> removeShellMenuItemClick(null));
+                        return true;
+                    }
+                } else if (e.getKeyCode() == KeyEvent.VK_A) {
+                    if (shellView.getRowCount() > 0) {
+                        shellView.selectAll();
+                        return true;
+                    }
+                } else if (e.getKeyCode() == KeyEvent.VK_F) {
+                    SwingUtilities.invokeLater(() -> showQuickFilterDialog());
+                    return true;
+                } else if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+                    hideShellViewPopupMenu();
                 }
                 return false;
             }
@@ -1611,7 +1635,113 @@ public class MainActivity extends JFrame {
         }
     }
 
+    /** 快捷键 Ctrl+F 的过滤词（空 = 不过滤）。 */
+    private String quickFilter = "";
+
+    /** 记录当前选中行的 Shell id（整表重建后按 id 还原选中）。 */
+    private String[] selectedShellIds() {
+        int[] rows = this.shellView.getSelectedRows();
+        String[] ids = new String[rows.length];
+        for (int i = 0; i < rows.length; i++) {
+            Object v = this.shellView.getValueAt(rows[i], 0);
+            ids[i] = v == null ? null : v.toString();
+        }
+        return ids;
+    }
+
+    /** 按 id 还原选中，并恢复滚动位置。 */
+    private void restoreSelection(String[] ids, int scroll) {
+        if (ids != null && ids.length > 0) {
+            javax.swing.ListSelectionModel sm = this.shellView.getSelectionModel();
+            sm.clearSelection();
+            for (int r = 0; r < this.shellView.getRowCount(); r++) {
+                Object v = this.shellView.getValueAt(r, 0);
+                if (v == null) continue;
+                String id = v.toString();
+                for (String want : ids) {
+                    if (id.equals(want)) {
+                        sm.addSelectionInterval(r, r);
+                        break;
+                    }
+                }
+            }
+        }
+        if (scroll > 0) {
+            SwingUtilities.invokeLater(() -> this.shellViewScrollPane.getVerticalScrollBar().setValue(scroll));
+        }
+    }
+
+    /** 后台计算「归属地」再回 EDT 只更新那一列（列表先出，不阻塞）。 */
+    private void fillIpLocationsAsync() {
+        final int n = this.shellView.getRowCount();
+        if (n == 0) return;
+        final String[] urls = new String[n];
+        final String[] ids = new String[n];
+        for (int r = 0; r < n; r++) {
+            urls[r] = String.valueOf(this.shellView.getValueAt(r, 1));
+            Object id = this.shellView.getValueAt(r, 0);
+            ids[r] = id == null ? null : id.toString();
+        }
+        final int col = this.shellView.getColumnCount() - 1;
+        new Thread(() -> {
+            IpLocationService.init();
+            final String[] loc = new String[n];
+            for (int r = 0; r < n; r++) {
+                try {
+                    loc[r] = IpLocationService.lookupUrl(urls[r]);
+                } catch (Throwable ignored) {
+                    loc[r] = "";
+                }
+            }
+            SwingUtilities.invokeLater(() -> {
+                for (int r = 0; r < this.shellView.getRowCount() && r < n; r++) {
+                    Object id = this.shellView.getValueAt(r, 0);
+                    if (id == null || !id.toString().equals(ids[r])) continue; // 列表变了就跳过该行
+                    this.shellView.setValueAt(loc[r], r, col);
+                }
+            });
+        }, "gsl5-ipdb").start();
+    }
+
+    private Vector<Vector<String>> applyQuickFilter(Vector<Vector<String>> rows) {
+        if (this.quickFilter == null || this.quickFilter.trim().isEmpty()) return rows;
+        String q = this.quickFilter.trim().toLowerCase();
+        Vector<Vector<String>> out = new Vector<>();
+        for (Vector<String> row : rows) {
+            StringBuilder sb = new StringBuilder();
+            for (String cell : row) sb.append(cell).append(' ');
+            if (sb.toString().toLowerCase().contains(q)) out.add(row);
+        }
+        return out;
+    }
+
+    /** Ctrl+F：按关键字过滤列表（URL/备注/分组等任意列）。 */
+    private void showQuickFilterDialog() {
+        String cur = GOptionPane.showInputDialog(this, "过滤关键字（留空显示全部）", this.quickFilter == null ? "" : this.quickFilter);
+        if (cur == null) return;
+        this.quickFilter = cur;
+        refreshShellViewNow();
+        if (this.operationLogPanel != null) {
+            this.operationLogPanel.appendLine(cur.trim().isEmpty()
+                    ? "[\u8fc7\u6ee4] \u5df2\u6e05\u9664\u8fc7\u6ee4"
+                    : "[\u8fc7\u6ee4] " + cur);
+        }
+    }
+
+    /** 打开选中 Shell 的交互窗口（双击 / Enter 共用）。 */
+    private void openSelectedShell() {
+        if (this.shellView.getSelectedRow() < 0) return;
+        this.interactMenuItemClick(null);
+    }
+
     public void refreshShellView() {
+        BusyCursor.run(this, () -> refreshShellViewNow());
+    }
+
+    /** 刷新实现：先立即出列表（不含归属地），后台补算归属地，并保持选中与滚动位置。 */
+    private void refreshShellViewNow() {
+        final String[] keepIds = selectedShellIds();
+        final int keepScroll = this.shellViewScrollPane.getVerticalScrollBar().getValue();
         Vector<Vector<String>> rowsVector = Db.getAllShell();
         if (rowsVector == null || rowsVector.isEmpty()) {
             rowsVector = new Vector<Vector<String>>();
@@ -1619,10 +1749,15 @@ public class MainActivity extends JFrame {
             rowsVector.remove(0);
         }
         rowsVector = filterRowsByKind(rowsVector, this.currentKind);
-        this.enrichShellRowsWithIpLocation(rowsVector);
+        rowsVector = applyQuickFilter(rowsVector);
+        for (Vector<String> row : rowsVector) {
+            row.add(""); // 归属地占位，稍后异步填
+        }
         this.shellView.AddRows(rowsVector);
         this.shellView.getModel().fireTableDataChanged();
         WallpaperTableStyle.applyToShellTable(this.shellView);
+        restoreSelection(keepIds, keepScroll);
+        fillIpLocationsAsync();
         this.refreshKindList();
         this.updateStatusBarText(rowsVector.size());
         if (this.operationLogPanel != null) {

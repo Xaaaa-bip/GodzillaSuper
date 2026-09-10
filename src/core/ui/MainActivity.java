@@ -144,6 +144,7 @@ public class MainActivity extends JFrame {
     private JLabel statusLabel;
     private AuroraBarPanel statusAuroraPanel;
     private JMenuItem copyselectItem;
+    private JMenuItem shareLinksItem;
     private JMenuItem interactMenuItem;
     private JMenuItem interactCacheMenuItem;
     private JMenuItem removeShell;
@@ -320,14 +321,18 @@ public class MainActivity extends JFrame {
         addShellMenuItem.setActionCommand("addShell");
         JMenuItem addDatabaseShellMenuItem = new JMenuItem("\u6dfb\u52a0\u6570\u636e\u5e93Shell");
         addDatabaseShellMenuItem.setActionCommand("addDatabaseShell");
+        JMenuItem exportLinksMenuItem = new JMenuItem("\u5206\u4eab\u94fe\u63a5\uff08\u652f\u6301\u591a\u9009\uff09");
+        exportLinksMenuItem.setActionCommand("exportLinks");
         JMenuItem importLinkMenuItem = new JMenuItem("\u5bfc\u5165\u94fe\u63a5");
         importLinkMenuItem.setActionCommand("importLink");
         this.targetMenu.add(addShellMenuItem);
         this.targetMenu.add(addDatabaseShellMenuItem);
         this.targetMenu.addSeparator();
+        this.targetMenu.add(exportLinksMenuItem);
         this.targetMenu.add(importLinkMenuItem);
         bindAutoHidePopup(addShellMenuItem);
         bindAutoHidePopup(addDatabaseShellMenuItem);
+        bindAutoHidePopup(exportLinksMenuItem);
         bindAutoHidePopup(importLinkMenuItem);
         this.attackMenu = new JMenu("\u653b\u51fb");
         JMenuItem shellLiveScanMenuItem = new JMenuItem("\u5b58\u6d3b\u626b\u63cf");
@@ -384,6 +389,7 @@ public class MainActivity extends JFrame {
         SvgIcons.apply(this.targetMenu, "target");
         SvgIcons.apply(addShellMenuItem, "add");
         SvgIcons.apply(addDatabaseShellMenuItem, "database");
+        SvgIcons.apply(exportLinksMenuItem, "copy");
         SvgIcons.apply(importLinkMenuItem, "import");
         SvgIcons.apply(this.attackMenu, "attack");
         SvgIcons.apply(generateShellMenuItem, "generate");
@@ -415,6 +421,8 @@ public class MainActivity extends JFrame {
         automaticBindClick.bindMenuItemClick(menuBar, (Map) null, this);
         this.copyselectItem = new JMenuItem("\u590d\u5236\u9009\u4e2d");
         this.copyselectItem.setActionCommand("copyShellViewSelected");
+        this.shareLinksItem = new JMenuItem("\u590d\u5236\u5206\u4eab\u94fe\u63a5\uff08\u652f\u6301\u591a\u9009\uff09");
+        this.shareLinksItem.setActionCommand("copyShareLinks");
         this.interactMenuItem = new JMenuItem("\u4ea4\u4e92");
         this.interactMenuItem.setActionCommand("interact");
         this.interactCacheMenuItem = new JMenuItem("\u8fdb\u5165\u7f13\u5b58");
@@ -428,12 +436,14 @@ public class MainActivity extends JFrame {
         SvgIcons.apply(this.interactMenuItem, "interact");
         SvgIcons.apply(this.interactCacheMenuItem, "cache");
         SvgIcons.apply(this.copyselectItem, "copy");
+        SvgIcons.apply(this.shareLinksItem, "copy");
         SvgIcons.apply(this.removeShell, "delete");
         SvgIcons.apply(this.editShell, "edit");
         SvgIcons.apply(this.refreshShell, "refresh");
         shellViewPopupMenu.add(this.interactMenuItem);
         shellViewPopupMenu.add(this.interactCacheMenuItem);
         shellViewPopupMenu.add(this.copyselectItem);
+        shellViewPopupMenu.add(this.shareLinksItem);
         shellViewPopupMenu.add(this.removeShell);
         shellViewPopupMenu.add(this.editShell);
         shellViewPopupMenu.add(this.refreshShell);
@@ -1248,6 +1258,17 @@ public class MainActivity extends JFrame {
         }
     }
 
+    private void exportLinksMenuItemClick(ActionEvent e) {
+        this.hideShellViewPopupMenu();
+        exportSelectedShells();
+    }
+
+    private void copyShareLinksMenuItemClick(ActionEvent e) {
+        this.hideShellViewPopupMenu();
+        exportSelectedShells();
+    }
+
+    /** 把当前选中的所有 Shell 打包成一个 gsl5:// 链接放进剪贴板（多选即多条）。 */
     private void exportSelectedShells() {
         String[] shellIds = this.getSlectedShellId();
         if (shellIds.length == 0) {
@@ -1296,11 +1317,6 @@ public class MainActivity extends JFrame {
             if (clipboardText == null || !clipboardText.startsWith(GSL_EXPORT_PROTO)) {
                 return;
             }
-            int q = GOptionPane.showConfirmDialog(getMainActivityFrame(),
-                    "\u68c0\u6d4b\u5230\u526a\u8d34\u677f\u4e2d\u7684Shell\u5bfc\u5165\u94fe\u63a5\uff0c\u662f\u5426\u7acb\u5373\u5bfc\u5165\uff1f", "\u5bfc\u5165Shell", 0);
-            if (q != 0) {
-                return;
-            }
             String encoded = clipboardText.substring(GSL_EXPORT_PROTO.length()).trim();
             if (encoded.isEmpty()) {
                 GOptionPane.showMessageDialog(getMainActivityFrame(), "\u5bfc\u5165\u94fe\u63a5\u6570\u636e\u4e3a\u7a7a", "\u63d0\u793a", 2);
@@ -1313,6 +1329,18 @@ public class MainActivity extends JFrame {
             gzis.close();
             String data = new String(rawBytes, StandardCharsets.UTF_8);
             String[] records = data.split(RECORD_SEPARATOR, -1);
+            int recordCount = 0;
+            for (String r : records) {
+                if (r != null && !r.trim().isEmpty()) {
+                    recordCount++;
+                }
+            }
+
+            int q = GOptionPane.showConfirmDialog(getMainActivityFrame(),
+                    "\u68c0\u6d4b\u5230\u526a\u8d34\u677f\u4e2d\u7684 Shell \u5bfc\u5165\u94fe\u63a5\uff08\u5171 " + recordCount + " \u6761\uff09\uff0c\u662f\u5426\u7acb\u5373\u5bfc\u5165\uff1f", "\u5bfc\u5165Shell", 0);
+            if (q != 0) {
+                return;
+            }
             java.util.ArrayList<String> importUrls = new java.util.ArrayList<>(); int addedCount = 0;
             int skipCount = 0;
             for (String record : records) {

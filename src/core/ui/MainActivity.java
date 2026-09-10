@@ -597,8 +597,13 @@ public class MainActivity extends JFrame {
                         SwingUtilities.invokeLater(() -> openSelectedShell());
                         return true;
                     }
-                } else if (!ctrl && code == KeyEvent.VK_DELETE) {
+                } else if (!ctrl && (code == KeyEvent.VK_DELETE || code == KeyEvent.VK_DECIMAL)) {
+                    // 小键盘 Del 在 NumLock 开启时是 VK_DECIMAL，两个都收
                     if (shellView.getSelectedRowCount() > 0) {
+                        final int n = shellView.getSelectedRowCount();
+                        if (operationLogPanel != null) {
+                            operationLogPanel.appendLine("[快捷键] Delete：删除选中的 " + n + " 条 Shell");
+                        }
                         SwingUtilities.invokeLater(() -> removeShellMenuItemClick(null));
                         return true;
                     }

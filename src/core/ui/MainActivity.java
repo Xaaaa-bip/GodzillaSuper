@@ -1307,15 +1307,79 @@ public class MainActivity extends JFrame {
         }
     }
 
+    /** Ctrl+V：剪贴板里是 gsl5:// 链接就直接导入（带确认）。 */
     private void importShellsFromClipboard() {
-        String clipboardText = null;
+        String clip = readClipboardString();
+        if (clip == null || !clip.trim().startsWith(GSL_EXPORT_PROTO)) {
+            return;
+        }
+        importShellsFromText(clip, true);
+    }
+
+    /** 菜单「目标 → 导入链接」：弹出输入框，粘贴链接后点「导入」。 */
+    private void importLinkMenuItemClick(ActionEvent e) {
+        this.hideShellViewPopupMenu();
+        showImportLinkDialog();
+    }
+
+    private String readClipboardString() {
         try {
             Transferable trans = Toolkit.getDefaultToolkit().getSystemClipboard().getContents(null);
             if (trans == null || !trans.isDataFlavorSupported(DataFlavor.stringFlavor)) {
-                return;
+                return null;
             }
-            clipboardText = (String) trans.getTransferData(DataFlavor.stringFlavor);
-            if (clipboardText == null || !clipboardText.startsWith(GSL_EXPORT_PROTO)) {
+            return (String) trans.getTransferData(DataFlavor.stringFlavor);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 导入链接对话框：空白输入框 + 从剪贴板粘贴 + 导入。 */
+    private void showImportLinkDialog() {
+        final JTextArea area = new JTextArea(8, 76);
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
+        String clip = readClipboardString();
+        if (clip != null && clip.trim().startsWith(GSL_EXPORT_PROTO)) {
+            area.setText(clip.trim());
+        }
+        JPanel panel = new JPanel(new BorderLayout(6, 8));
+        panel.add(new JLabel("<html>\u628a <code>gsl5://import?data=...</code> \u94fe\u63a5\u7c98\u8d34\u5230\u4e0b\u9762\uff0c\u70b9\u300c\u5bfc\u5165\u300d\u3002<br/>"
+                + "\u4e00\u6761\u94fe\u63a5\u53ef\u5305\u542b\u591a\u4e2a Shell\uff08\u5206\u4eab\u65f6\u591a\u9009\u5373\u53ef\uff09\u3002</html>"), BorderLayout.NORTH);
+        panel.add(new JScrollPane(area), BorderLayout.CENTER);
+        JPanel south = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        JButton pasteBtn = new JButton("\u4ece\u526a\u8d34\u677f\u7c98\u8d34");
+        pasteBtn.addActionListener(ev -> {
+            String t = readClipboardString();
+            if (t != null && !t.trim().isEmpty()) {
+                area.setText(t.trim());
+            }
+        });
+        south.add(pasteBtn);
+        panel.add(south, BorderLayout.SOUTH);
+        panel.setPreferredSize(new Dimension(660, 280));
+        int r = GOptionPane.showConfirmDialog(this, panel, "\u5bfc\u5165\u94fe\u63a5",
+                GOptionPane.OK_CANCEL_OPTION, GOptionPane.PLAIN_MESSAGE);
+        if (r != GOptionPane.OK_OPTION) {
+            return;
+        }
+        String text = area.getText();
+        if (text == null || text.trim().isEmpty()) {
+            GOptionPane.showMessageDialog(this, "\u8bf7\u5148\u7c98\u8d34\u94fe\u63a5", "\u63d0\u793a",
+                    GOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        importShellsFromText(text, false);
+    }
+
+    /** 真正的导入：rawText 是完整 gsl5:// 链接；confirm=true 时先弹确认框（Ctrl+V 路径用）。 */
+    private void importShellsFromText(String rawText, boolean confirm) {
+        try {
+            String clipboardText = rawText == null ? "" : rawText.trim();
+            if (!clipboardText.startsWith(GSL_EXPORT_PROTO)) {
+                GOptionPane.showMessageDialog(getMainActivityFrame(),
+                        "\u4e0d\u662f\u6709\u6548\u7684 gsl5:// \u5bfc\u5165\u94fe\u63a5", "\u63d0\u793a",
+                        GOptionPane.WARNING_MESSAGE);
                 return;
             }
             String encoded = clipboardText.substring(GSL_EXPORT_PROTO.length()).trim();
@@ -1337,10 +1401,12 @@ public class MainActivity extends JFrame {
                 }
             }
 
-            int q = GOptionPane.showConfirmDialog(getMainActivityFrame(),
-                    "\u68c0\u6d4b\u5230\u526a\u8d34\u677f\u4e2d\u7684 Shell \u5bfc\u5165\u94fe\u63a5\uff08\u5171 " + recordCount + " \u6761\uff09\uff0c\u662f\u5426\u7acb\u5373\u5bfc\u5165\uff1f", "\u5bfc\u5165Shell", 0);
-            if (q != 0) {
-                return;
+            if (confirm) {
+                int q = GOptionPane.showConfirmDialog(getMainActivityFrame(),
+                        "\u68c0\u6d4b\u5230\u526a\u8d34\u677f\u4e2d\u7684 Shell \u5bfc\u5165\u94fe\u63a5\uff08\u5171 " + recordCount + " \u6761\uff09\uff0c\u662f\u5426\u7acb\u5373\u5bfc\u5165\uff1f", "\u5bfc\u5165Shell", 0);
+                if (q != 0) {
+                    return;
+                }
             }
             java.util.ArrayList<String> importUrls = new java.util.ArrayList<>(); int addedCount = 0;
             int skipCount = 0;
@@ -1429,12 +1495,9 @@ public class MainActivity extends JFrame {
                     "\u5bfc\u5165\u5b8c\u6210! \u6210\u529f: " + addedCount + " \u6761, \u8df3\u8fc7: " + skipCount + " \u6761", "\u63d0\u793a", 1);
             this.refreshShellView();
         } catch (Exception e) {
-            // 剪贴板不是 gsl5:// 链接就静默返回；但确实是链接却失败时，必须让用户看到原因
-            if (clipboardText != null && clipboardText.startsWith(GSL_EXPORT_PROTO)) {
-                Log.error(e);
-                GOptionPane.showMessageDialog(getMainActivityFrame(),
-                        "导入失败: " + e, "错误", 0);
-            }
+            Log.error(e);
+            GOptionPane.showMessageDialog(getMainActivityFrame(),
+                    "导入失败: " + e, "错误", GOptionPane.ERROR_MESSAGE);
         }
     }
 

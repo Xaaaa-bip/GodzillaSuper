@@ -1308,12 +1308,13 @@ public class MainActivity extends JFrame {
     }
 
     private void importShellsFromClipboard() {
+        String clipboardText = null;
         try {
             Transferable trans = Toolkit.getDefaultToolkit().getSystemClipboard().getContents(null);
             if (trans == null || !trans.isDataFlavorSupported(DataFlavor.stringFlavor)) {
                 return;
             }
-            String clipboardText = (String) trans.getTransferData(DataFlavor.stringFlavor);
+            clipboardText = (String) trans.getTransferData(DataFlavor.stringFlavor);
             if (clipboardText == null || !clipboardText.startsWith(GSL_EXPORT_PROTO)) {
                 return;
             }
@@ -1428,7 +1429,12 @@ public class MainActivity extends JFrame {
                     "\u5bfc\u5165\u5b8c\u6210! \u6210\u529f: " + addedCount + " \u6761, \u8df3\u8fc7: " + skipCount + " \u6761", "\u63d0\u793a", 1);
             this.refreshShellView();
         } catch (Exception e) {
-            // Silently ignore non-GSL5 clipboard content
+            // 剪贴板不是 gsl5:// 链接就静默返回；但确实是链接却失败时，必须让用户看到原因
+            if (clipboardText != null && clipboardText.startsWith(GSL_EXPORT_PROTO)) {
+                Log.error(e);
+                GOptionPane.showMessageDialog(getMainActivityFrame(),
+                        "导入失败: " + e, "错误", 0);
+            }
         }
     }
 

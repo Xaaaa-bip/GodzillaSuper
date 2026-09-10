@@ -116,6 +116,9 @@ gsl/
 ### 3.1.8（2026-09-11）
 - **JDK 6–17 全兼容**：下发到目标端的字节码全部降至 v50（`payload.classs`、全部 `modules/*.class`、全部插件 `.classs`），JDK 6 / 11 / 17 真机矩阵（真 Tomcat + 真 JSP + HTTP 联调）全部通过；目标端字符集按 `file.encoding` 自动对齐，不再依赖代码页猜测
 - **达梦 / 人大金仓（新）**：内置达梦 DM8 与 KingbaseES V8 的 JDBC 驱动（均编译为 v50，JDK 6 起可用）、数据库类型、连接串与库表 SQL 模板；连接前自动探测目标端 classpath，缺驱动才按需上传。`db_list_types` 与 GUI 数据库下拉同步支持
+  - 达梦：驱动 `dm.jdbc.driver.DmDriver`，连接串 `jdbc:dm://主机:端口[/库名]`，**默认端口 5236**
+  - 金仓：驱动 `com.kingbase8.Driver`（旧版 `com.kingbase.Driver` 作为候选），连接串 `jdbc:kingbase8://主机:端口/库名`，**默认端口 54321**
+  - 连接串格式与默认端口已对照达梦/金仓官方文档核实
 - **PHP 载荷：禁用 exec 环境下的命令执行（新）**：目标 `disable_functions` 禁掉 `exec / passthru / system / shell_exec / popen / proc_open / putenv` 时，载荷转为 FastCGI 客户端连本机 php-fpm（自动发现 socket），通过 `PHP_ADMIN_VALUE` 注入 `sendmail_path` 触发 C 层 `popen` 执行命令，不依赖任何被禁函数、不落地
 - **C# 载荷升级**：`payload.dll` 改写结构特征（原二进制会被按 GodZ 家族特征查杀）；新增 `payloadsrc/`（`NxJob.cs` / `NxTop.cs` / `LY.cs` + `build_payload.bat`）便于自行构建
 - **界面**：新增后渗透插件中心（`PostExPluginHub`，按插件注解自动归类、卡片式切换）、全局色调遮罩（亮度 / 灰度，`UiToneOverlay`）、SVG 图标体系（38 个页签图标）；Shell 分组由 JTree 重构为 JList；文件选择 / 另存为 / 效果设置面板重构；启动模式对话框重写（去掉写死的默认路径与账号）
@@ -129,6 +132,15 @@ gsl/
 - **JarLoader**：无头环境下大 jar 上传 NPE 修复；`jarmembuff://` 在 JDK 16+ 报 unknown protocol 修复
 - **WebSocket 加密器**：模板中硬编码的 AES key 改为 `{secretKey}` 占位符
 - 新增终端适配器 `ShellTerminalAdapter`；修复 `JavaAShell.include` 的 NPE；修复 `shell_create` 走 C2 分支时未替换模板占位符
+
+- **Shell 多选一键分享**：「目标 → 分享链接（支持多选）」/ 右键「复制分享链接」把选中的多条 Shell 打包成一条 `gsl5://` 链接；导入端逐条还原并显示「共 N 条」。（此前多选导入本身可用，但「导入链接」菜单项的处理方法缺失、点了没反应，且右键「复制选中」复制的是单元格文本而非链接）
+- **导入链接对话框**：「目标 → 导入链接」改为弹出输入框 —— 空白框粘贴链接、可一键从剪贴板填入、剪贴板已是链接时自动预填
+- **界面响应性**：
+  - 列表刷新改为「立即出列表 + 后台补算归属地」，刷新后**保持选中行与滚动位置**（原来整表重建会丢选中、跳回顶部）
+  - 启动后台预热 IP 库；没有壁纸时表格不再走每格 alpha 合成的半透明包装
+  - 长操作有等待光标反馈（新增 `BusyCursor`），避免用户以为没点上而重复点击
+  - 快捷键：`Enter` 打开选中 Shell、`Delete` 删除、`Ctrl+A` 全选、`Ctrl+F` 关键字过滤、`Esc` 关右键菜单；**双击 Shell 直接打开交互窗口**（此前双击无反应）
+- **数据库**：连接编码不再把 `Auto`（shell 的默认值）原样传给目标端 —— 会解析成该 Shell 的实际编码，修复达梦/金仓/MySQL 等连库时因 `characterEncoding=Auto` 报错
 
 ### 3.1.7.1（2026-09-07）
 - **生成窗口**：运行时 / 算法 / 后缀 / 混淆 / C2 模板集中在一个「生成」表单，不再连环弹窗

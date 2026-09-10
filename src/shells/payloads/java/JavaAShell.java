@@ -567,7 +567,11 @@ public class JavaAShell extends AbstractPayload {
                 jdbcURL = "jdbc:sqlite:{databaseHost}";
                 break;
             case "dm":
+                // 官方格式: jdbc:dm://<host>:<port>[/<database>]，默认端口 5236
                 jdbcURL = "jdbc:dm://{databaseHost}:{databasePort}";
+                if (currentDatabase != null && !currentDatabase.isEmpty()) {
+                    jdbcURL = jdbcURL + "/" + currentDatabase;
+                }
                 break;
             case "kingbase":
                 jdbcURL = "jdbc:kingbase8://{databaseHost}:{databasePort}/{currentDatabase}";
@@ -580,7 +584,24 @@ public class JavaAShell extends AbstractPayload {
         return jdbcURL;
     }
 
+    /** 数据库连接编码不支持 "Auto"（现在是 shell 的默认值）：回退成 shell 已解析出的实际编码。 */
+    private void resolveDbCharsetIfAuto(DbInfo dbInfo) {
+        if (dbInfo == null) {
+            return;
+        }
+        String cs = dbInfo.getDatabaseCharset();
+        if (cs != null && !cs.trim().isEmpty() && !"auto".equalsIgnoreCase(cs.trim())) {
+            return;
+        }
+        String resolved = this.encoding == null ? null : this.encoding.getCharsetString();
+        if (resolved == null || resolved.trim().isEmpty() || "auto".equalsIgnoreCase(resolved.trim())) {
+            resolved = "UTF-8";
+        }
+        dbInfo.setDatabaseCharset(resolved);
+    }
+
     public GDatabaseResult execSql(DbInfo dbInfo, String execType, String execSql) {
+        resolveDbCharsetIfAuto(dbInfo);
         Encoding dbEncoding = dbInfo.getDatabaseCharset2();
         String jdbcURL = dbInfo.getConnectionString();
         if (jdbcURL.isEmpty()) {
@@ -701,6 +722,7 @@ public class JavaAShell extends AbstractPayload {
         dmDrives.add("dm.jdbc.driver.DmDriver");
         dmDrives.add("dm.jdbc.driver.DmdbDriver");
         kingbaseDrives.add("com.kingbase8.Driver");
+        kingbaseDrives.add("com.kingbase.Driver");
         customDrives.add("my.sql.Driver");
     }
 }

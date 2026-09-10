@@ -440,8 +440,14 @@ public class CSharpShell extends AbstractPayload {
     }
 
     public GDatabaseResult execSql(DbInfo dbInfo, String execType, String execSql) {
-        if (dbInfo.getDatabaseCharset() == null || dbInfo.getDatabaseCharset().trim().isEmpty()) {
-            dbInfo.setDatabaseCharset("UTF-8");
+        if (dbInfo.getDatabaseCharset() == null || dbInfo.getDatabaseCharset().trim().isEmpty()
+                || "auto".equalsIgnoreCase(dbInfo.getDatabaseCharset().trim())) {
+            // "Auto"（shell 默认）对数据库连接无意义，回退成 shell 已解析出的实际编码
+            String resolved = this.encoding == null ? null : this.encoding.getCharsetString();
+            if (resolved == null || resolved.trim().isEmpty() || "auto".equalsIgnoreCase(resolved.trim())) {
+                resolved = "UTF-8";
+            }
+            dbInfo.setDatabaseCharset(resolved);
         }
         Encoding dbEncoding = dbInfo.getDatabaseCharset2();
         String connectString = dbInfo.getConnectionString();

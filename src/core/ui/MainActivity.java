@@ -599,9 +599,17 @@ public class MainActivity extends JFrame {
                     SwingUtilities.invokeLater(() -> showQuickFilterDialog());
                     return true;
                 } else if (!ctrl && code == KeyEvent.VK_ENTER) {
-                    // 普通 Enter：打开选中 Shell（否则会被 JTable 当成"下移一行"）
-                    if (shellView.getSelectedRowCount() > 0) {
+                    // 普通 Enter：只在"恰好选中一条"时打开交互窗口（否则会被 JTable 当成"下移一行"）。
+                    // 多选时不打开——一次只能开一个，避免误开错的那条；删除用 Del/Backspace。
+                    final int selCount = shellView.getSelectedRowCount();
+                    if (selCount == 1) {
                         SwingUtilities.invokeLater(() -> openSelectedShell());
+                        return true;
+                    } else if (selCount > 1) {
+                        SwingUtilities.invokeLater(() -> GOptionPane.showMessageDialog(getMainActivityFrame(),
+                                "当前选中 " + selCount + " 条，Enter 只能打开一条。\n"
+                                        + "请只选中一条后按 Enter（双击该行也可以）；删除多条请用 Delete / Backspace。",
+                                "提示", 1));
                         return true;
                     }
                 } else if (!ctrl && (code == KeyEvent.VK_DELETE || code == KeyEvent.VK_DECIMAL

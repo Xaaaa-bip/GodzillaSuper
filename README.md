@@ -42,7 +42,7 @@
 | 客户端证书认证 | Shell 支持双向 TLS：客户端证书路径 + 证书密码，适配要求客户端证书的目标 |
 | 团队协作与审计 | 单机 SQLite / UNC 远程 SQLite / PostgreSQL 三数据源，全量操作审计 |
 | NetCore 动态载荷 | ASP.NET Core Middleware 载荷 + AES Base64 加密，文件 / 命令 / SQL / 插件加载 |
-| 检查更新 | 启动静默检查 GitHub Release，新版弹窗提示 |
+| 检查更新 | 菜单「更新 → 检查更新」手动比对 GitHub 最新 Release，不是最新版提示跳转下载 |
 
 ### 主要修改（相对原版 Godzilla）
 

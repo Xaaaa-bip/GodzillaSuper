@@ -567,8 +567,15 @@ public class MainActivity extends JFrame {
                     return false;
                 }
                 Window activeWindow = KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow();
-                if (activeWindow != MainActivity.this && !isChildWindowOf(activeWindow, MainActivity.this)) {
-                    return false;
+                if (activeWindow != MainActivity.this) {
+                    // 前台的对话框（确认框 / 设置框）优先：Enter 归它的默认按钮、Esc 归取消，
+                    // 否则确认删除时按 Enter 会被抢成"打开选中 Shell"
+                    if (activeWindow instanceof java.awt.Dialog) {
+                        return false;
+                    }
+                    if (!isChildWindowOf(activeWindow, MainActivity.this)) {
+                        return false;
+                    }
                 }
                 if (isTextInputFocus()) {
                     return false;

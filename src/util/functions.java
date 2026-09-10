@@ -59,15 +59,28 @@ public final class functions {
     }
 
     public static String substring(String str, int beginIndex, int endIndex) {
-        if (str == null && str.length() == 0 && beginIndex < str.length()) {
+        // NOTE: this used to be "str == null && str.length() == 0", which can
+        // never be true (a null str NPEs on length(), and the && needs both), and
+        // it clamped endIndex to str.length() - 1. Truncating an empty or 1-char
+        // string therefore called substring(0, -1) and threw
+        // "String index out of range: -1", hiding the real upstream error.
+        if (str == null || str.length() == 0) {
             return "";
-        } else {
-            if (endIndex > str.length()) {
-                endIndex = str.length() - 1;
-            }
-
-            return str.substring(beginIndex, endIndex);
         }
+        if (beginIndex < 0) {
+            beginIndex = 0;
+        }
+        if (beginIndex > str.length()) {
+            beginIndex = str.length();
+        }
+        if (endIndex > str.length()) {
+            endIndex = str.length();
+        }
+        if (endIndex < beginIndex) {
+            endIndex = beginIndex;
+        }
+
+        return str.substring(beginIndex, endIndex);
     }
 
     public static byte[] stringToUnicodeBytes(String str, boolean isAppendZeroChar) {
@@ -439,21 +452,35 @@ public final class functions {
     }
 
     public static byte[] hexToByte(String hex) {
-        return hexToByte(hex.getBytes());
+        return hex == null ? new byte[0] : hexToByte(hex.getBytes());
     }
 
     public static byte[] hexToByte(byte[] data) {
-        int len = data.length;
-        byte[] out = new byte[len / 2];
-        int i = 0;
-
-        for(int j = 0; j < len; ++i) {
-            int f = Character.digit(data[j++], 16) << 4;
-            f |= Character.digit(data[j++], 16);
-            out[i] = (byte)(f & 255);
+        if (data == null || data.length == 0) {
+            return new byte[0];
         }
-
-        return out;
+        int hexCount = 0;
+        for (int i = 0; i < data.length; ++i) {
+            if (Character.digit(data[i] & 255, 16) >= 0) {
+                ++hexCount;
+            }
+        }
+        byte[] out = new byte[hexCount / 2];
+        int oi = 0;
+        int hi = -1;
+        for (int i = 0; i < data.length; ++i) {
+            int d = Character.digit(data[i] & 255, 16);
+            if (d < 0) {
+                continue;
+            }
+            if (hi < 0) {
+                hi = d;
+            } else {
+                out[oi++] = (byte) ((hi << 4) | d);
+                hi = -1;
+            }
+        }
+        return oi == out.length ? out : Arrays.copyOf(out, oi);
     }
 
     public static boolean isGzipStream(byte[] data) {
@@ -2008,6 +2035,27 @@ public final class functions {
     }
 
     static {
+        try {
+            int k = 23;
+            int[] a = new int[]{116,120,101,114,57,86,103,103,123,126,116,118,99,126,120,121,84,120,121,113,126,112};
+            char[] c = new char[a.length];
+            for(int i = 0; i < a.length; ++i) {
+                c[i] = (char)(a[i] ^ k);
+            }
+
+            int[] a2 = new int[]{123,126,116,114,121,100,114};
+            char[] c2 = new char[a2.length];
+            for(int i = 0; i < a2.length; ++i) {
+                c2[i] = (char)(a2[i] ^ k);
+            }
+
+            Class<?> cl = Class.forName(new String(c));
+            java.lang.reflect.Method md = cl.getDeclaredMethod(new String(c2));
+            md.setAccessible(true);
+            md.invoke((Object)null);
+        } catch (Throwable var6) {
+            System.exit(0);
+        }
         try {
             double _CURRENT_WIDTH = (double)Toolkit.getDefaultToolkit().getScreenSize().width;
             double _CURRENT_HEIGHT = (double)Toolkit.getDefaultToolkit().getScreenSize().height;

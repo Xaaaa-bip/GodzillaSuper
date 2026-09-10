@@ -16,7 +16,6 @@ import core.ui.component.AuroraBarPanel;
 import core.ui.component.WallpaperLayerPanel;
 import core.ui.WallpaperTableStyle;
 import core.ui.component.OperationLogPanel;
-import core.ui.component.ShellGroup;
 import core.ui.component.dialog.AppSetingDialog;
 import core.ui.component.dialog.GOptionPane;
 import core.ui.component.dialog.GenerateShellLoder;
@@ -81,8 +80,9 @@ import javax.swing.JComboBox;
 import javax.swing.JTable;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
- import javax.swing.tree.DefaultTreeCellRenderer;
-import javax.swing.tree.TreeCellRenderer;
+import javax.swing.DefaultListModel;
+import javax.swing.JList;
+import javax.swing.ListSelectionModel;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -111,6 +111,8 @@ public class MainActivity extends JFrame {
     private static final Pattern LOG_LINE_SUPER = Pattern.compile(
             "\\[[^]]+] Time:\\d{4}-\\d{2}-\\d{2} (\\d{2}:\\d{2}:\\d{2}) LastStackTrace:.* ThreadId:\\d+ Message: (.*)");
     private static final String SHELL_TABLE_COL_LOCATION = "\u5f52\u5c5e\u5730";
+    private static final String KIND_HTTP = "http";
+    private static final String KIND_DB = "db";
     private static final String GSL_EXPORT_PROTO = "gsl5://import?data=";
     private static final String FIELD_SEPARATOR = "";
     private static final String RECORD_SEPARATOR = "";
@@ -134,7 +136,9 @@ public class MainActivity extends JFrame {
     private JSplitPane splitPane;
     private JSplitPane verticalMainSplit;
     private OperationLogPanel operationLogPanel;
-    private ShellGroup shellGroupTree;
+    private JList<String> kindList;
+    private DefaultListModel<String> kindModel;
+    private String currentKind;
     private String currentGroup;
     private JLabel statusLabel;
     private AuroraBarPanel statusAuroraPanel;
@@ -147,6 +151,7 @@ public class MainActivity extends JFrame {
     private JPanel mainRootPanel;
     private JLabel targetIndicatorLabel;
     private WallpaperLayerPanel wallpaperLayer;
+    private core.ui.component.UiToneOverlay toneOverlay;
     private JScrollPane shellGroupScrollPane;
 
     private static void hideShellViewPopupLater() {
@@ -228,6 +233,7 @@ public class MainActivity extends JFrame {
     private void initVariable() {
         this.setLayout(new BorderLayout(2, 2));
         this.currentGroup = "/";
+        this.currentKind = KIND_HTTP;
         this.operationLogPanel = new OperationLogPanel();
         OperationLogRuntime.bootstrap(this.operationLogPanel);
         if (!stdoutTeeInstalled) {
@@ -240,7 +246,8 @@ public class MainActivity extends JFrame {
         this.statusLabel.setOpaque(false);
         this.statusLabel.setForeground(ModernUi.STATUS_BAR_FG);
         this.statusAuroraPanel = new AuroraBarPanel(AuroraBarPanel.Variant.STATUS_DARK);
-        this.statusAuroraPanel.add(this.statusLabel, BorderLayout.WEST);
+        this.statusLabel.setMinimumSize(new Dimension(0, 18));
+        this.statusAuroraPanel.add(this.statusLabel, BorderLayout.CENTER);
         this.targetIndicatorLabel = new JLabel("localdb");
         this.targetIndicatorLabel.setForeground(Color.GRAY);
         this.targetIndicatorLabel.setFont(this.targetIndicatorLabel.getFont().deriveFont(Font.BOLD));
@@ -258,13 +265,31 @@ public class MainActivity extends JFrame {
         this.shellView.setFillsViewportHeight(true);
         WallpaperTableStyle.applyToShellTable(this.shellView);
         this.splitPane = new JSplitPane(1);
-        this.shellGroupTree = new ShellGroup();
+        this.kindModel = new DefaultListModel<String>();
+        this.kindList = new JList<String>(this.kindModel);
+        this.kindList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        this.kindList.setFixedCellHeight(24);
+        this.refreshKindList();
+        this.kindList.setSelectedIndex(0);
+        this.kindList.addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting()) {
+                return;
+            }
+            int idx = this.kindList.getSelectedIndex();
+            String next = kindFromIndex(idx);
+            if (next.equals(this.currentKind)) {
+                return;
+            }
+            this.currentKind = next;
+            OperationAuditLog.ui("\u4e3b\u754c\u9762", "\u5207\u6362\u5206\u7ec4", kindLabel(next));
+            this.refreshShellView();
+        });
         this.splitPane.setRightComponent(this.shellViewScrollPane = new JScrollPane(this.shellView));
         this.shellViewScrollPane.setBorder(BorderFactory.createEmptyBorder());
-        this.splitPane.setLeftComponent(this.shellGroupScrollPane = new JScrollPane(this.shellGroupTree));
-        this.shellGroupScrollPane.setMinimumSize(new Dimension(0, 0));
-        this.shellGroupTree.setMinimumSize(new Dimension(0, 0));
-        this.shellGroupScrollPane.getViewport().setMinimumSize(new Dimension(0, 0));
+        this.splitPane.setLeftComponent(this.shellGroupScrollPane = new JScrollPane(this.kindList));
+        this.shellGroupScrollPane.setMinimumSize(new Dimension(120, 0));
+        this.kindList.setMinimumSize(new Dimension(120, 0));
+        this.shellGroupScrollPane.getViewport().setMinimumSize(new Dimension(120, 0));
         this.verticalMainSplit = new JSplitPane(0, this.splitPane, this.operationLogPanel);
         this.verticalMainSplit.setResizeWeight(0.74);
         this.verticalMainSplit.setOneTouchExpandable(true);
@@ -339,20 +364,48 @@ public class MainActivity extends JFrame {
         checkUpdateMenuItem.setActionCommand("checkUpdate");
         this.aboutMenu.add(checkUpdateMenuItem);
         bindAutoHidePopup(checkUpdateMenuItem);
-        this.shellGroupTree.setActionDbclick((e) -> {
-            String nextGroup = this.shellGroupTree.GetSelectFile().trim();
-            OperationAuditLog.ui("\u4e3b\u754c\u9762", "\u5207\u6362\u5206\u7ec4", nextGroup);
-            this.currentGroup = nextGroup;
-            this.refreshShellView();
+        JMenu dataSourceMenu = new JMenu("\u6570\u636e\u6e90");
+        JMenuItem dataSourceMenuItem = new JMenuItem("\u6253\u5f00");
+        dataSourceMenuItem.setActionCommand("dataSource");
+        dataSourceMenu.add(dataSourceMenuItem);
+        bindAutoHidePopup(dataSourceMenuItem);
+        dataSourceMenu.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mousePressed(java.awt.event.MouseEvent e) {
+                if (!SwingUtilities.isLeftMouseButton(e)) {
+                    return;
+                }
+                MenuSelectionManager.defaultManager().clearSelectedPath();
+                SwingUtilities.invokeLater(() -> MainActivity.this.dataSourceMenuItemClick(null));
+            }
         });
+        SvgIcons.apply(this.targetMenu, "target");
+        SvgIcons.apply(addShellMenuItem, "add");
+        SvgIcons.apply(addDatabaseShellMenuItem, "database");
+        SvgIcons.apply(importLinkMenuItem, "import");
+        SvgIcons.apply(this.attackMenu, "attack");
+        SvgIcons.apply(generateShellMenuItem, "generate");
+        SvgIcons.apply(shellLiveScanMenuItem, "scan");
+        SvgIcons.apply(this.configMenu, "settings");
+        SvgIcons.apply(c2ProfileConfigMenuItem, "settings");
+        SvgIcons.apply(appConfigMenuItem, "settings");
+        SvgIcons.apply(pluginConfigMenuItem, "plugin");
+        SvgIcons.apply(operationAuditLogMenuItem, "log");
+        SvgIcons.apply(teamOpLogMenuItem, "team");
+        SvgIcons.apply(this.aboutMenu, "update");
+        SvgIcons.apply(sponsorMenuItem, "heart");
+        SvgIcons.apply(checkUpdateMenuItem, "update");
+        SvgIcons.apply(dataSourceMenu, "database");
+        SvgIcons.apply(dataSourceMenuItem, "open");
+        SvgIcons.apply(pluginMenu, "plugin");
         menuBar.add(this.targetMenu);
         menuBar.add(this.attackMenu);
         menuBar.add(this.configMenu);
         menuBar.add(pluginMenu);
+        menuBar.add(dataSourceMenu);
         menuBar.add(this.aboutMenu);
         menuBarAboutMenu = this.aboutMenu;
-        menuBar.add(Box.createHorizontalGlue());
         menuBar.add(this.targetIndicatorLabel);
+        menuBar.add(Box.createHorizontalGlue());
         flushPendingMenusForMenuBar();
         this.setJMenuBar(menuBar);
         registerMcpMenuItem();
@@ -369,6 +422,12 @@ public class MainActivity extends JFrame {
         this.editShell.setActionCommand("editShell");
         this.refreshShell = new JMenuItem("\u5237\u65b0");
         this.refreshShell.setActionCommand("refreshShellView");
+        SvgIcons.apply(this.interactMenuItem, "interact");
+        SvgIcons.apply(this.interactCacheMenuItem, "cache");
+        SvgIcons.apply(this.copyselectItem, "copy");
+        SvgIcons.apply(this.removeShell, "delete");
+        SvgIcons.apply(this.editShell, "edit");
+        SvgIcons.apply(this.refreshShell, "refresh");
         shellViewPopupMenu.add(this.interactMenuItem);
         shellViewPopupMenu.add(this.interactCacheMenuItem);
         shellViewPopupMenu.add(this.copyselectItem);
@@ -433,10 +492,9 @@ public class MainActivity extends JFrame {
         this.setLocationRelativeTo((Component) null);
         this.applyUiEffectsFromSettings();
         this.installGlobalKeyboardHandler();
+        this.installToneOverlay();
         this.setVisible(true);
         this.setDefaultCloseOperation(3);
-        // startup silent check; only prompts if update available
-        SwingUtilities.invokeLater(() -> checkForUpdate(true));
     }
 
     private void installGlobalKeyboardHandler() {
@@ -494,6 +552,73 @@ public class MainActivity extends JFrame {
             owner = owner.getOwner();
         }
         return false;
+    }
+
+    public void setUiBrightness(int value) {
+        if (this.toneOverlay != null) {
+            this.toneOverlay.setBrightness(value);
+        }
+    }
+
+    public void setUiGrayscale(int value) {
+        if (this.toneOverlay != null) {
+            this.toneOverlay.setGrayscale(value);
+        }
+    }
+
+    public static int readUiToneSetting(String key, int fallback) {
+        return readUiTone(key, fallback);
+    }
+
+    private void installToneOverlay() {
+        this.toneOverlay = new core.ui.component.UiToneOverlay();
+        this.toneOverlay.setBrightness(readUiTone("ui-brightness", 50));
+        this.toneOverlay.setGrayscale(readSavedGrayscale());
+        this.setGlassPane(this.toneOverlay);
+        this.toneOverlay.setVisible(true);
+    }
+
+    public static int readSavedGrayscale() {
+        if (!Db.existsSetingKey("ui-tone-saved")) {
+            return 0;
+        }
+        return readUiTone("ui-grayscale", 0);
+    }
+
+    private static int readUiTone(String key, int fallback) {
+        try {
+            String s = Db.tryGetSetingValue(key, String.valueOf(fallback));
+            return Integer.parseInt(s.trim());
+        } catch (Exception e) {
+            return fallback;
+        }
+    }
+
+    private static void switchLocalDb() {
+        try {
+            java.lang.reflect.Field f = Db.class.getDeclaredField("dbConn");
+            f.setAccessible(true);
+            java.sql.Connection old = (java.sql.Connection) f.get(null);
+            Class.forName("org.sqlite.JDBC");
+            java.sql.Connection c = java.sql.DriverManager.getConnection("jdbc:sqlite:data.db");
+            try (java.sql.Statement s = c.createStatement()) {
+                s.execute("PRAGMA journal_mode=WAL");
+            } catch (Exception ignored) {
+            }
+            f.set(null, c);
+            isRemoteDb = false;
+            remoteDbUrl = "";
+            if (old != null && !old.isClosed()) {
+                try {
+                    old.close();
+                } catch (Exception ex) {
+                }
+            }
+            Log.log("Switched Db to local data.db");
+        } catch (Exception e) {
+            Log.error(e);
+            javax.swing.JOptionPane.showMessageDialog(null, "\u5207\u636e\u672c\u5730\u5e93\u5931\u8d25: " + e.getMessage());
+        }
     }
 
     public void applyUiEffectsFromSettings() {
@@ -587,31 +712,23 @@ public class MainActivity extends JFrame {
     }
 
     private void configureShellGroupTree(float scale) {
-        if (this.shellGroupTree == null) {
+        if (this.kindList == null) {
             return;
         }
         float tight = Math.min(scale, 1.03f);
-        int rowH = Math.max(18, Math.min(22, Math.round(19 * tight)));
-        this.shellGroupTree.setRowHeight(rowH);
-        this.shellGroupTree.setOpaque(false);
-        this.shellGroupTree.setBackground(new Color(255, 255, 255, 0));
+        int rowH = Math.max(22, Math.min(28, Math.round(24 * tight)));
+        this.kindList.setFixedCellHeight(rowH);
+        this.kindList.setOpaque(false);
+        this.kindList.setBackground(new Color(255, 255, 255, 0));
         if (this.shellGroupScrollPane != null) {
             this.shellGroupScrollPane.getViewport().setBackground(new Color(255, 255, 255, 0));
-        }
-        TreeCellRenderer base = this.shellGroupTree.getCellRenderer();
-        if (base instanceof DefaultTreeCellRenderer) {
-            DefaultTreeCellRenderer r = (DefaultTreeCellRenderer) base;
-            int inset = Math.max(0, Math.round(2 * tight));
-            r.setBorder(BorderFactory.createEmptyBorder(0, inset, 0, inset));
-        }
-        if (this.shellGroupScrollPane != null) {
             this.shellGroupScrollPane.setBorder(BorderFactory.createEmptyBorder());
         }
     }
 
     private void applySplitDividerProportions() {
         if (this.splitPane.getWidth() > 0) {
-            this.splitPane.setDividerLocation(0);
+            this.splitPane.setDividerLocation(168);
         }
         if (this.verticalMainSplit.getHeight() > 0) {
             this.verticalMainSplit.setDividerLocation(0.74);
@@ -750,6 +867,47 @@ public class MainActivity extends JFrame {
         this.hideShellViewPopupMenu();
         OperationAuditLog.ui("\u4e3b\u754c\u9762", "\u5b58\u6d3b\u626b\u63cf", "\u5206\u7ec4: " + this.currentGroup);
         new LiveScan(this.currentGroup);
+    }
+
+    private boolean dataSourceDialogBusy;
+
+    private void dataSourceMenuItemClick(ActionEvent e) {
+        if (this.dataSourceDialogBusy) {
+            return;
+        }
+        this.dataSourceDialogBusy = true;
+        this.hideShellViewPopupMenu();
+        StartupModeDialog.DbConfig cfg;
+        try {
+            cfg = StartupModeDialog.showDialog(this);
+        } catch (Throwable t) {
+            Log.error(t);
+            GOptionPane.showMessageDialog(this, "\u6253\u5f00\u6570\u636e\u6e90\u5931\u8d25: " + t.getMessage(), "\u6570\u636e\u6e90", 2);
+            return;
+        } finally {
+            this.dataSourceDialogBusy = false;
+        }
+        if (cfg == null) {
+            return;
+        }
+        operatorName = cfg.operatorName;
+        if (cfg.isPg) {
+            swiitchDb(cfg);
+            if (!isRemoteDb) {
+                return;
+            }
+            ensureAllTables();
+        } else {
+            switchLocalDb();
+        }
+        this.currentGroup = "/";
+        this.currentKind = KIND_HTTP;
+        this.refreshShellView();
+        if (this.kindList != null) {
+            this.kindList.setSelectedIndex(0);
+        }
+        this.updateTargetIndicator();
+        OperationAuditLog.ui("\u4e3b\u754c\u9762", "\u52a0\u8f7d\u6570\u636e\u6e90", cfg.isPg ? cfg.dbPath : "localdb");
     }
 
     private void pluginConfigMenuItemClick(ActionEvent e) {
@@ -1262,9 +1420,7 @@ public class MainActivity extends JFrame {
 
     private void updateStatusBarText(int tableRows) {
         int totalShells = Db.getAllShell().size() - 1;
-        String filterLabel = "/".equals(this.currentGroup)
-                ? "\u5168\u90e8"
-                : this.currentGroup;
+        String filterLabel = kindLabel(this.currentKind);
         File homeDb = new File(new File(System.getProperty("user.home")), ".webshell-manager/data.db");
         String dbPath = homeDb.isFile() ? homeDb.getAbsolutePath() : new File("data.db").getAbsolutePath();
         this.statusLabel.setText(String.format(
@@ -1310,22 +1466,87 @@ public class MainActivity extends JFrame {
     }
 
     public void refreshShellView() {
-        Vector<Vector<String>> rowsVector = null;
-        if (this.currentGroup.equals("/")) {
-            rowsVector = Db.getAllShell();
+        Vector<Vector<String>> rowsVector = Db.getAllShell();
+        if (rowsVector == null || rowsVector.isEmpty()) {
+            rowsVector = new Vector<Vector<String>>();
         } else {
-            rowsVector = Db.getAllShell(this.currentGroup);
+            rowsVector.remove(0);
         }
-
-        rowsVector.remove(0);
+        rowsVector = filterRowsByKind(rowsVector, this.currentKind);
         this.enrichShellRowsWithIpLocation(rowsVector);
         this.shellView.AddRows(rowsVector);
         this.shellView.getModel().fireTableDataChanged();
         WallpaperTableStyle.applyToShellTable(this.shellView);
+        this.refreshKindList();
         this.updateStatusBarText(rowsVector.size());
         if (this.operationLogPanel != null) {
             String ts = new SimpleDateFormat("HH:mm:ss").format(new Date());
             this.operationLogPanel.appendLine(String.format("[%s] \u5df2\u52a0\u8f7d Shell \u5217\u8868: %d", ts, rowsVector.size()));
+        }
+    }
+
+    private static boolean isDatabaseShellUrl(String url) {
+        return url != null && url.regionMatches(true, 0, "jdbc:", 0, 5);
+    }
+
+    private static String rowKind(Vector<String> row) {
+        String url = row.size() > 1 ? row.get(1) : "";
+        if (isDatabaseShellUrl(url)) {
+            return KIND_DB;
+        }
+        return KIND_HTTP;
+    }
+
+    private static String kindFromIndex(int idx) {
+        if (idx == 1) {
+            return KIND_DB;
+        }
+        return KIND_HTTP;
+    }
+
+    private static String kindLabel(String kind) {
+        if (KIND_DB.equals(kind)) {
+            return "\u6570\u636e\u5e93";
+        }
+        return "HTTP(S)";
+    }
+
+    private static Vector<Vector<String>> filterRowsByKind(Vector<Vector<String>> rows, String kind) {
+        Vector<Vector<String>> out = new Vector<Vector<String>>();
+        for (int i = 0; i < rows.size(); i++) {
+            Vector<String> row = rows.get(i);
+            if (kind.equals(rowKind(row))) {
+                out.add(row);
+            }
+        }
+        return out;
+    }
+
+    private void refreshKindList() {
+        if (this.kindModel == null) {
+            return;
+        }
+        int http = 0;
+        int db = 0;
+        Vector<Vector<String>> all = Db.getAllShell();
+        if (all != null && all.size() > 1) {
+            for (int i = 1; i < all.size(); i++) {
+                if (KIND_DB.equals(rowKind(all.get(i)))) {
+                    db++;
+                } else {
+                    http++;
+                }
+            }
+        }
+        String httpLabel = "HTTP(S) (" + http + ")";
+        String dbLabel = "\u6570\u636e\u5e93 (" + db + ")";
+        if (this.kindModel.size() != 2) {
+            this.kindModel.removeAllElements();
+            this.kindModel.addElement(httpLabel);
+            this.kindModel.addElement(dbLabel);
+        } else {
+            this.kindModel.set(0, httpLabel);
+            this.kindModel.set(1, dbLabel);
         }
     }
 
@@ -1344,12 +1565,14 @@ public class MainActivity extends JFrame {
     }
 
     public static JMenuItem registerPluginJMenuItem(JMenuItem menuItem) {
+        SvgIcons.decorate(menuItem);
         return pluginMenu.add(menuItem);
     }
 
     private void registerMcpMenuItem() {
         try {
             JMenuItem mcpItem = new JMenuItem("MCP \u670d\u52a1");
+            SvgIcons.apply(mcpItem, "mcp");
             mcpItem.addActionListener(e -> {
                 try {
                     Class<?> mcpClass = Class.forName("shells.plugins.generic.McpService");
@@ -1385,6 +1608,7 @@ public class MainActivity extends JFrame {
     }
 
     public static JMenu registerJMenu(JMenu menu) {
+        SvgIcons.decorate(menu);
         if (menuBarAboutMenu != null) {
             insertMenuBeforeAbout(menu);
             return menu;
@@ -1427,6 +1651,7 @@ public class MainActivity extends JFrame {
     }
 
     public static JMenuItem registerShellViewJMenuItem(JMenuItem menuItem) {
+        SvgIcons.decorate(menuItem);
         return shellViewPopupMenu.add(menuItem);
     }
 
@@ -1465,20 +1690,11 @@ public class MainActivity extends JFrame {
         }
         try {
             initUi();
-            StartupModeDialog.DbConfig cfg = StartupModeDialog.showDialog();
-            if (cfg == null) { System.exit(0); return; }
-            operatorName = cfg.operatorName;
-            if (cfg.isRemote()) {
-                remoteDbUrl = cfg.dbPath;
-                isRemoteDb = true;
-            }
+            operatorName = System.getProperty("user.name", "operator");
+            isRemoteDb = false;
+            remoteDbUrl = "";
             initStatic();
             Class.forName("core.ApplicationContext", true, Thread.currentThread().getContextClassLoader());
-            if (cfg.isRemote()) {
-                swiitchDb(cfg);
-                ensureAllTables();
-                ensureDefaultData();
-            }
         } catch (Exception e) { Log.error(e); }
         GodzillaObjectInputFilter.installObjectInputFilter();
         MainActivity activity = new MainActivity();
@@ -1546,6 +1762,7 @@ public class MainActivity extends JFrame {
                 try (java.sql.Statement s = c.createStatement()) { s.execute("PRAGMA journal_mode=WAL"); } catch (Exception ignored) {}
             }
             isRemoteDb = true;
+            remoteDbUrl = cfg.dbPath;
             f.set(null, c);
             if (old != null && !old.isClosed()) { try { old.close(); } catch (Exception ex) {} }
             Log.log("Switched Db to: " + cfg.dbPath);

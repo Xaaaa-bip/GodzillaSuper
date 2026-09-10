@@ -232,10 +232,10 @@ public class BasicShellSetting extends JFrame {
         panel2.add(this.proxyComboBox, new GridConstraints(10, 1, 1, 1, 0, 0, 2, 0, (Dimension)null, (Dimension)null, (Dimension)null, 0, false));
         this.encodingLabel = new JLabel();
         this.encodingLabel.setText("\u7f16\u7801");
-        panel2.add(this.encodingLabel, new GridConstraints(11, 0, 1, 1, 8, 0, 0, 0, (Dimension)null, (Dimension)null, (Dimension)null, 0, false));
+        this.encodingLabel.setVisible(false);
         this.encodingComboBox = new JComboBox();
         this.encodingComboBox.setEditable(true);
-        panel2.add(this.encodingComboBox, new GridConstraints(11, 1, 1, 1, 0, 0, 2, 0, (Dimension)null, (Dimension)null, (Dimension)null, 0, false));
+        this.encodingComboBox.setVisible(false);
         this.payloadLabel = new JLabel();
         this.payloadLabel.setText("\u6709\u6548\u8f7d\u8377");
         panel2.add(this.payloadLabel, new GridConstraints(12, 0, 1, 1, 8, 0, 0, 0, (Dimension)null, (Dimension)null, (Dimension)null, 0, false));
@@ -470,6 +470,9 @@ public class BasicShellSetting extends JFrame {
         String payload = (String)this.payloadComboBox.getSelectedItem();
         String cryption = (String)this.cryptionComboBox.getSelectedItem();
         String encoding = (String)this.encodingComboBox.getSelectedItem();
+        if (encoding == null || encoding.trim().length() == 0) {
+            encoding = "UTF-8";
+        }
         String headers = this.headersTextArea.getText();
         String reqLeft = this.leftTextArea.getText();
         String reqRight = this.rightTextArea.getText();

@@ -3,7 +3,11 @@ package core.ui.component.dialog;
 import core.Db;
 import core.EasyI18N;
 import java.awt.Component;
+import java.awt.Dialog;
+import java.awt.FileDialog;
+import java.awt.Frame;
 import java.awt.HeadlessException;
+import java.awt.Window;
 import java.io.File;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JFileChooser;
@@ -12,8 +16,9 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.filechooser.FileSystemView;
 
 /**
- * Local file dialog. Always uses {@link SafeFileSystemView} and Swing (not
- * JavaFX/native), so a missing or disconnected drive letter cannot freeze the UI.
+ * Local file picker. Windows uses the native dialog so the directory
+ * combo lists Desktop / This PC / drives. Other platforms use JFileChooser
+ * with the default FileSystemView (do not wrap it — that empties the combo).
  */
 public class GFileChooser {
 
@@ -27,19 +32,22 @@ public class GFileChooser {
 
     private String initDirectory = StaticLastDirectory;
     private String title;
-    private FileSystemView fsv = SafeFileSystemView.get();
+    private FileSystemView fsv;
     private String selectedFile;
     private String fileFilterDescription;
     private String[] fileFilterExtensions;
+    private String approveButtonText;
 
     public GFileChooser() {
     }
 
     public GFileChooser(FileSystemView fsv) {
-        this();
-        if (fsv != null) {
-            this.fsv = fsv instanceof SafeFileSystemView ? fsv : new SafeFileSystemView(fsv, SafeFileSystemView.DEFAULT_TIMEOUT_MS);
-        }
+        this.fsv = fsv;
+    }
+
+    private static boolean isWindows() {
+        String os = System.getProperty("os.name", "");
+        return os.toLowerCase().contains("win");
     }
 
     private static String getDefaultDirectory() {
@@ -47,7 +55,7 @@ public class GFileChooser {
         try {
             String stored = Db.getSetingValue(LAST_DIR_KEY, fallback);
             File dir = new File(stored);
-            if (SafeFileSystemView.existsSafe(dir) && dir.isDirectory()) {
+            if (dir.isDirectory()) {
                 return dir.getAbsolutePath();
             }
         } catch (Throwable ignored) {
@@ -70,6 +78,10 @@ public class GFileChooser {
     public void setFileFilter(String description, String... extensions) {
         this.fileFilterDescription = description;
         this.fileFilterExtensions = extensions;
+    }
+
+    public void setApproveButtonText(String approveButtonText) {
+        this.approveButtonText = approveButtonText;
     }
 
     public String getTitle() {
@@ -127,7 +139,7 @@ public class GFileChooser {
         File startDir = null;
         if (this.initDirectory != null) {
             File candidate = new File(this.initDirectory);
-            if (SafeFileSystemView.existsSafe(candidate) && candidate.isDirectory()) {
+            if (candidate.isDirectory()) {
                 this.initDirectory = candidate.getAbsolutePath();
                 startDir = candidate;
             } else {
@@ -135,7 +147,12 @@ public class GFileChooser {
             }
         }
 
-        File selected = showSwingDialog(parent, type, startDir);
+        File selected;
+        if (isWindows()) {
+            selected = showNativeDialog(parent, type, startDir);
+        } else {
+            selected = showSwingDialog(parent, type, startDir);
+        }
         if (selected != null && selected.getParentFile() != null) {
             String parentPath = selected.getParentFile().getAbsolutePath();
             if (StaticLastDirectory == null || !StaticLastDirectory.equals(parentPath)) {
@@ -149,18 +166,51 @@ public class GFileChooser {
         return selected;
     }
 
-    private File showSwingDialog(Component parent, FileChooserType type, File startDir) throws HeadlessException {
-        JFileChooser chooser = new JFileChooser();
-        SafeFileSystemView.apply(chooser);
-        if (this.fsv != null) {
-            chooser.setFileSystemView(this.fsv);
+    private File showNativeDialog(Component parent, FileChooserType type, File startDir) {
+        Window window = parent == null ? null : SwingUtilities.getWindowAncestor(parent);
+        if (window == null && parent instanceof Window) {
+            window = (Window) parent;
+        }
+        int mode = type == FileChooserType.SAVE ? FileDialog.SAVE : FileDialog.LOAD;
+        FileDialog fd;
+        if (window instanceof Frame) {
+            fd = new FileDialog((Frame) window, this.title == null ? "" : this.title, mode);
+        } else if (window instanceof Dialog) {
+            fd = new FileDialog((Dialog) window, this.title == null ? "" : this.title, mode);
+        } else {
+            fd = new FileDialog((Frame) null, this.title == null ? "" : this.title, mode);
         }
         if (startDir != null) {
-            chooser.setCurrentDirectory(startDir);
+            fd.setDirectory(startDir.getAbsolutePath());
+        }
+        if (this.selectedFile != null && this.selectedFile.trim().length() > 0) {
+            File hint = new File(this.selectedFile);
+            fd.setFile(hint.getName());
+            if (startDir == null && hint.getParentFile() != null && hint.getParentFile().isDirectory()) {
+                fd.setDirectory(hint.getParentFile().getAbsolutePath());
+            }
+        }
+        fd.setVisible(true);
+        String name = fd.getFile();
+        String dir = fd.getDirectory();
+        if (name == null || dir == null) {
+            return null;
+        }
+        return new File(dir, name);
+    }
+
+    private File showSwingDialog(Component parent, FileChooserType type, File startDir) throws HeadlessException {
+        JFileChooser chooser = startDir != null ? new JFileChooser(startDir) : new JFileChooser();
+        if (this.fsv != null) {
+            chooser.setFileSystemView(this.fsv);
         }
         if (this.title != null) {
             chooser.setDialogTitle(this.title);
         }
+        if (this.approveButtonText != null && this.approveButtonText.trim().length() > 0) {
+            chooser.setApproveButtonText(this.approveButtonText);
+        }
+        chooser.setAcceptAllFileFilterUsed(true);
         if (this.selectedFile != null) {
             chooser.setSelectedFile(new File(this.selectedFile));
         }

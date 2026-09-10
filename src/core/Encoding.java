@@ -19,6 +19,21 @@ public class Encoding {
      */
     private volatile String lastDecodedCharset;
 
+    /**
+     * 目标端**实际**用来解释我们发去字节的字符集，由知道答案的 payload 类填入：
+     * Java payload 从目标的 {@code file.encoding} 读（模块解码用的就是
+     * {@code Charset.defaultCharset()}）；.NET Core payload 恒为 UTF-8。
+     *
+     * 一旦设置就**优先于**用户选择：目标端的解码方式不可配置，选别的必然乱码。
+     * 控制台代码页（chcp）推断只对 C#/ASP 这类用 {@code Encoding.Default}/
+     * 会话代码页的目标成立；JDK 18+ 起 {@code file.encoding} 固定为 UTF-8
+     * （JEP 400），与 chcp 分叉，所以不能只靠 chcp。
+     *
+     * 只影响**编码方向**。响应方向仍交给 autoDecoding 逐响应判断——响应里混着
+     * 命令输出（控制台码页）和 payload 自己拼的文本（JVM 字符集），不能一刀切。
+     */
+    private volatile String remoteCharset;
+
     private static final String[] ENCODING_TYPES = new String[]{"Auto", "UTF-8", "GBK", "GB2312", "BIG5", "GB18030", "ISO-8859-1", "latin1", "UTF16", "ascii", "cp850"};
 
     private Encoding(String charsetString) {
@@ -56,12 +71,27 @@ public class Encoding {
     }
 
     // Auto: use the charset that won the last CJK decode; before any detection fall back to
-    // platform default (same as the legacy empty-encoding behavior).
+    // a real Java charset (never the "Auto" label, never null).
     private String encodeCharset() {
+        // What the target decodes with beats every guess, including an explicit
+        // pick: target-side decoding is not configurable, so anything else is
+        // guaranteed mojibake. Only Java/NetCore payloads set this.
+        if (this.remoteCharset != null && this.remoteCharset.trim().length() > 0) {
+            String cs = this.remoteCharset.trim();
+            try {
+                if (Charset.isSupported(cs)) {
+                    return cs;
+                }
+            } catch (Exception ignored) {
+            }
+        }
         if (!AUTO.equals(this.charsetString)) {
             return this.charsetString;
         }
-        return this.lastDecodedCharset;
+        if (this.lastDecodedCharset != null && this.lastDecodedCharset.length() > 0) {
+            return this.lastDecodedCharset;
+        }
+        return resolveIoCharset(AUTO, null);
     }
 
     public String Decoding(byte[] bytes) {
@@ -69,6 +99,13 @@ public class Encoding {
             return "";
         }
         if (AUTO.equals(this.charsetString)) {
+            return autoDecoding(bytes);
+        }
+        // 已知目标字符集时也不能钉死解码方向：目标端的响应本来就是混合编码的
+        // —— 命令输出是操作系统码页的字节原样返回，payload 自己拼的文本才走
+        // JVM/协议字符集。钉死任何一个都会错一半，所以交给逐响应探测。
+        // （常见情形下探测结果与钉死的值一致，行为不变。）
+        if (this.remoteCharset != null && this.remoteCharset.trim().length() > 0) {
             return autoDecoding(bytes);
         }
         try {
@@ -210,6 +247,53 @@ public class Encoding {
             }
         }
         return true;
+    }
+
+    /**
+     * Charset name safe for {@code InputStreamReader}/{@code OutputStreamWriter}.
+     * {@code Auto} is a detector label, not a Java charset.
+     */
+    public String ioCharsetName() {
+        return resolveIoCharset(this.charsetString, this.lastDecodedCharset);
+    }
+
+    public static String resolveIoCharset(String name) {
+        return resolveIoCharset(name, null);
+    }
+
+    public static String resolveIoCharset(String name, String autoHint) {
+        if (name != null) {
+            String trimmed = name.trim();
+            if (trimmed.length() > 0 && !AUTO.equalsIgnoreCase(trimmed)) {
+                try {
+                    if (Charset.isSupported(trimmed)) {
+                        return trimmed;
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        if (autoHint != null && autoHint.trim().length() > 0) {
+            try {
+                if (Charset.isSupported(autoHint.trim())) {
+                    return autoHint.trim();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return Charset.defaultCharset().name();
+    }
+
+    /**
+     * 声明目标端的真实字符集（见 {@link #remoteCharset}）。传 null/空串表示未知，
+     * 退回原有推断逻辑。由 payload 类在拿到目标的信息后调用。
+     */
+    public void setRemoteCharset(String charset) {
+        this.remoteCharset = charset;
+    }
+
+    public String getRemoteCharset() {
+        return this.remoteCharset;
     }
 
     public void setCharsetString(String charsetString) {

@@ -16,6 +16,7 @@ import javax.swing.JCheckBox;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JSlider;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
 /**
@@ -24,6 +25,8 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 public class UiEffectsSettingsPanel extends JPanel {
 
     private final JLabel wallpaperPathLabel;
+    private JSlider brightSlider;
+    private JSlider graySlider;
 
     public UiEffectsSettingsPanel() {
         super(new BorderLayout(8, 8));
@@ -60,16 +63,55 @@ public class UiEffectsSettingsPanel extends JPanel {
         gc.fill = GridBagConstraints.HORIZONTAL;
         gc.weightx = 1;
         gc.insets = new Insets(14, 0, 4, 0);
+        JLabel toneSec = new JLabel("<html><b>\u4eae\u5ea6 / \u7070\u5ea6</b></html>");
+        grid.add(toneSec, gc);
+
+        gc.gridy = 4;
+        gc.insets = new Insets(2, 0, 4, 0);
+        this.brightSlider = new JSlider(0, 100, MainActivity.readUiToneSetting("ui-brightness", 50));
+        grid.add(buildToneRow("\u4eae\u5ea6", this.brightSlider, true), gc);
+
+        gc.gridy = 5;
+        this.graySlider = new JSlider(0, 100, MainActivity.readSavedGrayscale());
+        grid.add(buildToneRow("\u7070\u5ea6", this.graySlider, false), gc);
+
+        gc.gridy = 6;
+        gc.fill = GridBagConstraints.NONE;
+        gc.weightx = 0;
+        gc.insets = new Insets(6, 0, 4, 0);
+        JPanel toneBtns = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        JButton saveToneBtn = new JButton("\u4fdd\u5b58");
+        saveToneBtn.addActionListener(e -> saveTone());
+        JButton resetToneBtn = new JButton("\u6062\u590d\u9ed8\u8ba4");
+        resetToneBtn.addActionListener(e -> resetTone());
+        toneBtns.add(saveToneBtn);
+        toneBtns.add(resetToneBtn);
+        grid.add(toneBtns, gc);
+
+        gc.gridy = 7;
+        gc.fill = GridBagConstraints.HORIZONTAL;
+        gc.weightx = 1;
+        gc.insets = new Insets(4, 0, 4, 0);
+        JLabel toneHint = new JLabel(
+                "<html><body style='width:320px'><font color=#64748b>"
+                        + "\u62d6\u52a8\u6ed1\u5757\u53ef\u9884\u89c8\uff0c\u70b9\u4fdd\u5b58\u540e\u4e0b\u6b21\u542f\u52a8\u4ecd\u751f\u6548\u3002\u4eae\u5ea6 50 \u4e3a\u9ed8\u8ba4\uff0c\u7070\u5ea6 0 \u4e3a\u5173\u95ed\u3002"
+                        + "</font></body></html>");
+        grid.add(toneHint, gc);
+
+        gc.gridy = 8;
+        gc.fill = GridBagConstraints.HORIZONTAL;
+        gc.weightx = 1;
+        gc.insets = new Insets(14, 0, 4, 0);
         JLabel sec = new JLabel("<html><b>\u81ea\u5b9a\u4e49\u58c1\u7eb8\uff08\u4e0e\u5f53\u524d\u4e3b\u9898\u878d\u5408\uff09</b></html>");
         grid.add(sec, gc);
 
-        gc.gridy = 4;
+        gc.gridy = 9;
         gc.insets = new Insets(2, 0, 4, 0);
         wallpaperPathLabel = new JLabel();
         refreshWallpaperPathLabel();
         grid.add(wallpaperPathLabel, gc);
 
-        gc.gridy = 5;
+        gc.gridy = 10;
         gc.fill = GridBagConstraints.NONE;
         gc.weightx = 0;
         JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
@@ -81,7 +123,7 @@ public class UiEffectsSettingsPanel extends JPanel {
         btnRow.add(clearBtn);
         grid.add(btnRow, gc);
 
-        gc.gridy = 6;
+        gc.gridy = 11;
         gc.fill = GridBagConstraints.HORIZONTAL;
         gc.weightx = 1;
         gc.insets = new Insets(4, 0, 4, 0);
@@ -93,6 +135,51 @@ public class UiEffectsSettingsPanel extends JPanel {
         grid.add(whint, gc);
 
         add(grid, BorderLayout.NORTH);
+    }
+
+    private JPanel buildToneRow(String title, JSlider slider, boolean brightness) {
+        JPanel row = new JPanel(new BorderLayout(8, 0));
+        JLabel name = new JLabel(title);
+        JLabel value = new JLabel(String.valueOf(slider.getValue()));
+        value.setPreferredSize(new java.awt.Dimension(28, 18));
+        slider.addChangeListener(e -> {
+            int v = slider.getValue();
+            value.setText(String.valueOf(v));
+            MainActivity f = MainActivity.getMainActivityFrame();
+            if (f != null) {
+                if (brightness) {
+                    f.setUiBrightness(v);
+                } else {
+                    f.setUiGrayscale(v);
+                }
+            }
+        });
+        row.add(name, BorderLayout.WEST);
+        row.add(slider, BorderLayout.CENTER);
+        row.add(value, BorderLayout.EAST);
+        return row;
+    }
+
+    private void applyTonePreview() {
+        MainActivity f = MainActivity.getMainActivityFrame();
+        if (f != null) {
+            f.setUiBrightness(this.brightSlider.getValue());
+            f.setUiGrayscale(this.graySlider.getValue());
+        }
+    }
+
+    private void saveTone() {
+        Db.updateSetingKV("ui-brightness", String.valueOf(this.brightSlider.getValue()));
+        Db.updateSetingKV("ui-grayscale", String.valueOf(this.graySlider.getValue()));
+        Db.updateSetingKV("ui-tone-saved", "1");
+        applyTonePreview();
+        GOptionPane.showMessageDialog(this, "\u5df2\u4fdd\u5b58", "\u63d0\u793a", 1);
+    }
+
+    private void resetTone() {
+        this.brightSlider.setValue(50);
+        this.graySlider.setValue(0);
+        applyTonePreview();
     }
 
     private void refreshWallpaperPathLabel() {

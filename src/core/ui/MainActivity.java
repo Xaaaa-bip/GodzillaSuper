@@ -570,39 +570,39 @@ public class MainActivity extends JFrame {
                 if (activeWindow != MainActivity.this && !isChildWindowOf(activeWindow, MainActivity.this)) {
                     return false;
                 }
-                if (!e.isControlDown()) {
-                    return false;
-                }
                 if (isTextInputFocus()) {
                     return false;
                 }
-                if (e.getKeyCode() == KeyEvent.VK_C) {
+                final boolean ctrl = e.isControlDown();
+                final int code = e.getKeyCode();
+                if (ctrl && code == KeyEvent.VK_C) {
                     if (shellView.getSelectedRowCount() > 0) {
                         SwingUtilities.invokeLater(() -> exportSelectedShells());
                         return true;
                     }
-                } else if (e.getKeyCode() == KeyEvent.VK_V) {
+                } else if (ctrl && code == KeyEvent.VK_V) {
                     SwingUtilities.invokeLater(() -> importShellsFromClipboard());
                     return true;
-                } else if (e.getKeyCode() == KeyEvent.VK_ENTER) {
-                    if (shellView.getSelectedRowCount() > 0) {
-                        SwingUtilities.invokeLater(() -> openSelectedShell());
-                        return true;
-                    }
-                } else if (e.getKeyCode() == KeyEvent.VK_DELETE) {
-                    if (shellView.getSelectedRowCount() > 0) {
-                        SwingUtilities.invokeLater(() -> removeShellMenuItemClick(null));
-                        return true;
-                    }
-                } else if (e.getKeyCode() == KeyEvent.VK_A) {
+                } else if (ctrl && code == KeyEvent.VK_A) {
                     if (shellView.getRowCount() > 0) {
                         shellView.selectAll();
                         return true;
                     }
-                } else if (e.getKeyCode() == KeyEvent.VK_F) {
+                } else if (ctrl && code == KeyEvent.VK_F) {
                     SwingUtilities.invokeLater(() -> showQuickFilterDialog());
                     return true;
-                } else if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+                } else if (!ctrl && code == KeyEvent.VK_ENTER) {
+                    // 普通 Enter：打开选中 Shell（否则会被 JTable 当成"下移一行"）
+                    if (shellView.getSelectedRowCount() > 0) {
+                        SwingUtilities.invokeLater(() -> openSelectedShell());
+                        return true;
+                    }
+                } else if (!ctrl && code == KeyEvent.VK_DELETE) {
+                    if (shellView.getSelectedRowCount() > 0) {
+                        SwingUtilities.invokeLater(() -> removeShellMenuItemClick(null));
+                        return true;
+                    }
+                } else if (code == KeyEvent.VK_ESCAPE) {
                     hideShellViewPopupMenu();
                 }
                 return false;

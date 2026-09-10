@@ -597,8 +597,9 @@ public class MainActivity extends JFrame {
                         SwingUtilities.invokeLater(() -> openSelectedShell());
                         return true;
                     }
-                } else if (!ctrl && (code == KeyEvent.VK_DELETE || code == KeyEvent.VK_DECIMAL)) {
-                    // 小键盘 Del 在 NumLock 开启时是 VK_DECIMAL，两个都收
+                } else if (!ctrl && (code == KeyEvent.VK_DELETE || code == KeyEvent.VK_DECIMAL
+                        || code == KeyEvent.VK_BACK_SPACE)) {
+                    // 主键盘 Del / 小键盘 Del(NumLock 开时是 VK_DECIMAL) / Backspace(Enter 上方带箭头的键) 都当删除
                     if (shellView.getSelectedRowCount() > 0) {
                         final int n = shellView.getSelectedRowCount();
                         if (operationLogPanel != null) {

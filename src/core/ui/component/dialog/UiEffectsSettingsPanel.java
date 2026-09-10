@@ -13,6 +13,7 @@ import java.io.File;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -27,6 +28,10 @@ public class UiEffectsSettingsPanel extends JPanel {
     private final JLabel wallpaperPathLabel;
     private JSlider brightSlider;
     private JSlider graySlider;
+    private JCheckBox chkFold;
+    private JComboBox<String> styleBox;
+    private JSlider foldSlider;
+    private JSlider delaySlider;
 
     public UiEffectsSettingsPanel() {
         super(new BorderLayout(8, 8));
@@ -134,7 +139,105 @@ public class UiEffectsSettingsPanel extends JPanel {
                         + "</font></body></html>");
         grid.add(whint, gc);
 
-        add(grid, BorderLayout.NORTH);
+        gc.gridy = 12;
+        gc.fill = GridBagConstraints.HORIZONTAL;
+        gc.weightx = 1;
+        gc.insets = new Insets(14, 0, 4, 0);
+        grid.add(new JLabel("<html><b>动效</b></html>"), gc);
+
+        gc.gridy = 13;
+        gc.insets = new Insets(2, 0, 4, 0);
+        this.chkFold = new JCheckBox("启用窗口开合动画（主窗口打开 / 关闭）");
+        this.chkFold.setSelected(ModernUi.isFoldAnimEnabled());
+        this.chkFold.addActionListener(e -> persistFoldAnim(this.chkFold.isSelected()));
+        grid.add(this.chkFold, gc);
+
+        gc.gridy = 14;
+        JPanel styleRow = new JPanel(new BorderLayout(8, 0));
+        styleRow.add(new JLabel("样式"), BorderLayout.WEST);
+        this.styleBox = new JComboBox<>(new String[]{"旋转（绕竖轴 3D）", "折叠（沿中缝对折）"});
+        this.styleBox.setSelectedIndex(ModernUi.isFoldRotate() ? 0 : 1);
+        this.styleBox.addActionListener(e -> persistFoldStyle(this.styleBox.getSelectedIndex() == 1));
+        styleRow.add(this.styleBox, BorderLayout.CENTER);
+        grid.add(styleRow, gc);
+
+        gc.gridy = 15;
+        this.foldSlider = new JSlider(60, 900, ModernUi.getFoldDurationMs());
+        grid.add(buildSliderRow("时长", this.foldSlider, true), gc);
+
+        gc.gridy = 16;
+        this.delaySlider = new JSlider(0, 2000, ModernUi.getFoldDelayMs());
+        grid.add(buildSliderRow("延迟", this.delaySlider, false), gc);
+
+        gc.gridy = 17;
+        gc.fill = GridBagConstraints.HORIZONTAL;
+        gc.weightx = 1;
+        gc.insets = new Insets(4, 0, 4, 0);
+        grid.add(new JLabel(
+                "<html><body style='width:320px'><font color=#64748b>"
+                        + "默认关闭。延迟 = 窗口出现后等多久再开始动（0 表示立即）；"
+                        + "点「预览」按当前设置重播一次。"
+                        + "</font></body></html>"), gc);
+
+        // 外面套滚动条：对话框尺寸较小时「动效」分区也能滚到
+        add(new javax.swing.JScrollPane(grid), BorderLayout.CENTER);
+    }
+
+    /** 时长 / 延迟共用的一行：名称 + 滑块 + 数值 + 预览按钮。 */
+    private JPanel buildSliderRow(String title, JSlider slider, boolean isDuration) {
+        JPanel row = new JPanel(new BorderLayout(8, 0));
+        JLabel value = new JLabel(String.valueOf(slider.getValue()));
+        value.setPreferredSize(new java.awt.Dimension(44, 18));
+        slider.addChangeListener(e -> {
+            int v = slider.getValue();
+            value.setText(String.valueOf(v));
+            if (isDuration) {
+                persistFoldMs(v);
+            } else {
+                persistFoldDelay(v);
+            }
+        });
+        JButton previewBtn = new JButton("预览");
+        previewBtn.addActionListener(e -> {
+            MainActivity f = MainActivity.getMainActivityFrame();
+            if (f != null) {
+                f.replayFoldPreview();
+            }
+        });
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        right.add(value);
+        right.add(previewBtn);
+        row.add(new JLabel(title), BorderLayout.WEST);
+        row.add(slider, BorderLayout.CENTER);
+        row.add(right, BorderLayout.EAST);
+        return row;
+    }
+
+    private static void persistFoldAnim(boolean on) {
+        Db.updateSetingKV(ModernUi.SETTING_FOLD_ANIM, String.valueOf(on));
+        if (on) {
+            MainActivity f = MainActivity.getMainActivityFrame();
+            if (f != null) {
+                f.replayFoldPreview();
+            }
+        }
+    }
+
+    private static void persistFoldMs(int ms) {
+        Db.updateSetingKV(ModernUi.SETTING_FOLD_MS, String.valueOf(ms));
+    }
+
+    private static void persistFoldDelay(int ms) {
+        Db.updateSetingKV(ModernUi.SETTING_FOLD_DELAY, String.valueOf(ms));
+    }
+
+    private static void persistFoldStyle(boolean foldStyle) {
+        Db.updateSetingKV(ModernUi.SETTING_FOLD_STYLE,
+                foldStyle ? ModernUi.FOLD_STYLE_FOLD : ModernUi.FOLD_STYLE_ROTATE);
+        MainActivity f = MainActivity.getMainActivityFrame();
+        if (f != null) {
+            f.replayFoldPreview();
+        }
     }
 
     private JPanel buildToneRow(String title, JSlider slider, boolean brightness) {

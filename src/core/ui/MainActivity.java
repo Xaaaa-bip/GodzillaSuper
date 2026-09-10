@@ -13,6 +13,7 @@ import core.shell.ShellEntity;
 import core.ui.component.C2ProfileManage;
 import core.ui.component.DataView;
 import core.ui.component.AuroraBarPanel;
+import core.ui.component.FoldTransition;
 import core.ui.component.WallpaperLayerPanel;
 import core.ui.WallpaperTableStyle;
 import core.ui.component.OperationLogPanel;
@@ -152,6 +153,8 @@ public class MainActivity extends JFrame {
     private JLabel targetIndicatorLabel;
     private WallpaperLayerPanel wallpaperLayer;
     private core.ui.component.UiToneOverlay toneOverlay;
+    /** 启动时的开合动效句柄（windowOpened 后 start()） */
+    private FoldTransition.Pending pendingFold;
     private JScrollPane shellGroupScrollPane;
 
     private static void hideShellViewPopupLater() {
@@ -486,15 +489,61 @@ public class MainActivity extends JFrame {
         this.addWindowListener(new WindowAdapter() {
             @Override
             public void windowOpened(WindowEvent e) {
-                SwingUtilities.invokeLater(() -> MainActivity.this.applySplitDividerProportions());
+                SwingUtilities.invokeLater(() -> {
+                    MainActivity.this.applySplitDividerProportions();
+                    // 布局稳定后再起展开动画（快照才是最终界面）
+                    if (MainActivity.this.pendingFold != null) {
+                        FoldTransition.Pending p = MainActivity.this.pendingFold;
+                        MainActivity.this.pendingFold = null;
+                        p.start();
+                    }
+                });
+            }
+
+            @Override
+            public void windowClosing(WindowEvent e) {
+                MainActivity.this.exitWithFold();
             }
         });
         this.setLocationRelativeTo((Component) null);
         this.applyUiEffectsFromSettings();
         this.installGlobalKeyboardHandler();
         this.installToneOverlay();
+        // 先装覆盖层（不抓快照），窗口可见且布局完成后由 windowOpened 触发 start()
+        if (ModernUi.isFoldAnimEnabled() && FoldTransition.isAvailable()) {
+            this.pendingFold = FoldTransition.foldOpen(this, this.toneOverlay,
+                    ModernUi.getFoldDurationMs(), ModernUi.getFoldDelayMs(), ModernUi.isFoldRotate());
+        }
         this.setVisible(true);
-        this.setDefaultCloseOperation(3);
+        this.setDefaultCloseOperation(javax.swing.WindowConstants.DO_NOTHING_ON_CLOSE);
+    }
+
+    /** 关闭主窗口：开了动效就先播收起动画，再真正退出（等价于原来的 EXIT_ON_CLOSE）。 */
+    private void exitWithFold() {
+        if (ModernUi.isFoldAnimEnabled() && FoldTransition.isAvailable() && isShowing()) {
+            FoldTransition.foldClose(this, this.toneOverlay, ModernUi.getFoldDurationMs(),
+                    ModernUi.isFoldRotate(), new Runnable() {
+                        public void run() {
+                            MainActivity.this.dispose();
+                            System.exit(0);
+                        }
+                    });
+        } else {
+            this.dispose();
+            System.exit(0);
+        }
+    }
+
+    /** 设置面板「预览」按钮：按当前设置重播一次展开动效。 */
+    public void replayFoldPreview() {
+        if (!isShowing() || !FoldTransition.isAvailable()) {
+            return;
+        }
+        FoldTransition.Pending p = FoldTransition.foldOpen(this, this.toneOverlay,
+                ModernUi.getFoldDurationMs(), ModernUi.getFoldDelayMs(), ModernUi.isFoldRotate());
+        if (p != null) {
+            p.start();
+        }
     }
 
     private void installGlobalKeyboardHandler() {

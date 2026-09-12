@@ -111,7 +111,20 @@ public class CryptionPdfStreamChain extends AbstractC2ProfileCryptionChain {
                 inf.setInput(z);
                 byte[] buf = new byte[1024];
                 while (!inf.finished()) {
-                    out.write(buf, 0, inf.inflate(buf));
+                    int n = inf.inflate(buf);
+                    if (n == 0) {
+                        // see CryptionPngIdatChain: inflate() returning 0 with no input left is a
+                        // truncated stream, and looping on it hangs the (synchronized) decode forever.
+                        // finished() first -- a stream completing on this call also returns 0.
+                        if (inf.finished()) {
+                            break;
+                        }
+                        if (inf.needsInput() || inf.needsDictionary()) {
+                            inf.end();
+                            throw new IllegalArgumentException("truncated deflate stream in pdf");
+                        }
+                    }
+                    out.write(buf, 0, n);
                 }
                 inf.end();
                 return out.toByteArray();

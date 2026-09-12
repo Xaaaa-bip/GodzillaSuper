@@ -63,7 +63,7 @@ public class Db {
     }
 
     public static synchronized Vector<Vector<String>> getAllShell() {
-        String selectShell = "SELECT id,url,payload,cryption,encoding,proxyType,remark,createTime,updateTime FROM shell";
+        String selectShell = "SELECT id,url,payload,cryption,proxyType,remark,createTime FROM shell";
         Vector<Vector<String>> rows = new Vector();
 
         try {
@@ -95,7 +95,7 @@ public class Db {
         if ("/".equals(groupId)) {
             return getAllShell();
         } else {
-            String selectShell = "SELECT shell.id,shell.url,shell.payload,shell.cryption,shell.encoding,shell.proxyType,shell.remark,shell.createTime,shell.updateTime FROM shellEnv  LEFT JOIN shell ON shell.id = shellId  WHERE key='ENV_GROUP_ID' and value LIKE ?";
+            String selectShell = "SELECT shell.id,shell.url,shell.payload,shell.cryption,shell.proxyType,shell.remark,shell.createTime FROM shellEnv  LEFT JOIN shell ON shell.id = shellId  WHERE key='ENV_GROUP_ID' and value LIKE ?";
             Vector<Vector<String>> rows = new Vector();
 
             try {
@@ -239,7 +239,7 @@ public class Db {
         try {
             File cacheFile = new File(String.format("%s/%s", "GodzillaCache", id));
             if (!functions.delFiles(new File(String.format("%s/%s", "GodzillaCache", id))) && cacheFile.exists()) {
-                GOptionPane.showMessageDialog(MainActivity.getFrame(), "ï¿½Þ·ï¿½É¾ï¿½ï¿½ï¿½ï¿½Ç°Shell ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½Õ¼ï¿½ï¿½ï¿½Þ·ï¿½É¾ï¿½ï¿½");
+                GOptionPane.showMessageDialog(MainActivity.getFrame(), "?????????Shell ?????????????????????");
                 return 0;
             } else {
                 preparedStatement.setString(1, id);
@@ -700,7 +700,7 @@ public class Db {
             functions.addShutdownHook(Db.class, (Object)null);
         } catch (Throwable var2) {
             var2.printStackTrace();
-            GOptionPane.showMessageDialog((Component)null, "Êý¾Ý¿â³õÊ¼»¯Ê§°Ü!");
+            GOptionPane.showMessageDialog((Component)null, "????????????!");
             System.exit(0);
         }
 

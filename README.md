@@ -42,7 +42,7 @@
 | 客户端证书认证 | Shell 支持双向 TLS：客户端证书路径 + 证书密码，适配要求客户端证书的目标 |
 | 团队协作与审计 | 单机 SQLite / UNC 远程 SQLite / PostgreSQL 三数据源，全量操作审计 |
 | NetCore 动态载荷 | ASP.NET Core Middleware 载荷 + AES Base64 加密，文件 / 命令 / SQL / 插件加载 |
-| 检查更新 | 启动静默检查 GitHub Release，新版弹窗提示 |
+| 检查更新 | 菜单「更新 → 检查更新」手动比对 GitHub 最新 Release，不是最新版提示跳转下载 |
 
 ### 主要修改（相对原版 Godzilla）
 
@@ -53,12 +53,18 @@
 - 团队多数据源协作（单机 / UNC / PostgreSQL）
 - MCP Bearer Token 鉴权 + CLI 自动写配置 + Linux headless 支持（3.1.3）
 - 检查更新（3.1.4）
+- C2 流量伪装容器链：PNG / PDF / GIF（3.1.7）
+- 达梦 DM8 / 人大金仓 KingbaseES 数据库支持，内置驱动按需上传（3.1.8）
+- PHP 无 exec 环境命令执行（FastCGI 连本机 php-fpm，不依赖被禁函数）（3.1.8）
+- JDK 6–17 目标端全兼容（下发字节码统一 v50）（3.1.8）
 
 **修复**：
 - PHP 混淆乱码、DisplayName 中文乱码（PHP/JSP/C# 连带修复，3.1.5）
 - 杀软识别名称乱码（3.1.5）
 - PHP 免杀模板 0KB（3.1.1）
 - 命令回显、Shell 加载遮罩竞态（3.1.2）
+- MCP 响应非法 JSON 打断 SSE 连接、`file_search` 丢失整个目录结果（3.1.8）
+- 数据库 UPDATE / DDL 报假失败（`Query OK` 被当错误抛出）（3.1.8）
 
 完整明细见 [更新日志](#更新日志)。
 
@@ -106,6 +112,47 @@ gsl/
 ---
 
 ## 更新日志
+
+### 3.1.8（2026-09-11）
+- **JDK 6–17 全兼容**：下发到目标端的字节码全部降至 v50（`payload.classs`、全部 `modules/*.class`、全部插件 `.classs`），JDK 6 / 11 / 17 真机矩阵（真 Tomcat + 真 JSP + HTTP 联调）全部通过；目标端字符集按 `file.encoding` 自动对齐，不再依赖代码页猜测
+- **达梦 / 人大金仓（新）**：内置达梦 DM8 与 KingbaseES V8 的 JDBC 驱动（均编译为 v50，JDK 6 起可用）、数据库类型、连接串与库表 SQL 模板；连接前自动探测目标端 classpath，缺驱动才按需上传。`db_list_types` 与 GUI 数据库下拉同步支持
+  - 达梦：驱动 `dm.jdbc.driver.DmDriver`，连接串 `jdbc:dm://主机:端口[/库名]`，**默认端口 5236**
+  - 金仓：驱动 `com.kingbase8.Driver`（旧版 `com.kingbase.Driver` 作为候选），连接串 `jdbc:kingbase8://主机:端口/库名`，**默认端口 54321**
+  - 连接串格式与默认端口已对照达梦/金仓官方文档核实
+- **PHP 载荷：禁用 exec 环境下的命令执行（新）**：目标 `disable_functions` 禁掉 `exec / passthru / system / shell_exec / popen / proc_open / putenv` 时，载荷转为 FastCGI 客户端连本机 php-fpm（自动发现 socket），通过 `PHP_ADMIN_VALUE` 注入 `sendmail_path` 触发 C 层 `popen` 执行命令，不依赖任何被禁函数、不落地
+- **C# 载荷升级**：`payload.dll` 改写结构特征（原二进制会被按 GodZ 家族特征查杀）；新增 `payloadsrc/`（`NxJob.cs` / `NxTop.cs` / `LY.cs` + `build_payload.bat`）便于自行构建
+- **界面**：新增后渗透插件中心（`PostExPluginHub`，按插件注解自动归类、卡片式切换）、全局色调遮罩（亮度 / 灰度，`UiToneOverlay`）、SVG 图标体系（38 个页签图标）；Shell 分组由 JTree 重构为 JList；文件选择 / 另存为 / 效果设置面板重构；启动模式对话框重写（去掉写死的默认路径与账号）
+- **MCP 工具修复**：
+  - `oplog_query` 等以 `[` 开头的输出此前被当作原始 JSON 直出，产生**非法响应并打断 SSE 连接**（客户端报 `MCP error -3`）
+  - `file_search` 遇到目录列表中文件名为 null 的条目会抛 NPE 并被吞掉，导致**整个目录的搜索结果丢失**；同时改为真正的通配符（`*` / `?`）匹配
+  - `functions.substring` 在空串 / 越界时执行 `substring(0,-1)` 崩溃，把真实错误盖成 `String index out of range: -1`
+  - 无头模式下插件工具（NewCmd / Mimikatz / TH_TOOLS 等）因构造期创建 Swing 组件而全部报 `HeadlessException`，现已可在无头模式使用
+- **MCP**：CLI 启动恢复自动写入 Claude Code / Codex 客户端配置；恢复 Mimikatz 免 frame 执行路径（共享内存加载 + PE→shellcode + 分片上传 + `evalFunc`），不再依赖 GUI
+- **数据库**：目标端 UPDATE / DDL 的成功提示（`Query OK, N rows affected`）不再被当错误抛出，修复 update 型 SQL 全部报假失败；驱动加载改走 TCCL，兼容 JDK 16+ 模块强封装
+- **JarLoader**：无头环境下大 jar 上传 NPE 修复；`jarmembuff://` 在 JDK 16+ 报 unknown protocol 修复
+- **WebSocket 加密器**：模板中硬编码的 AES key 改为 `{secretKey}` 占位符
+- 新增终端适配器 `ShellTerminalAdapter`；修复 `JavaAShell.include` 的 NPE；修复 `shell_create` 走 C2 分支时未替换模板占位符
+- **C2 流量伪装容器链修复（png / gif / pdf，Java 与 C# 载荷均已实测通过）**：此前这几条链只有 Java 内存马能用，C# 载荷连接失败，且失败原因不止一个：
+  - `c2.aspx` / `c2.ashx` 模板的**首次请求只加载载荷、不写响应**，客户端拿到空 body 直接报 `not a png/gif/pdf container`；现改为两个分支共用同一条响应出口，首次连接也返回合法容器
+  - 三条链的客户端解压 / 解码循环**没有终止条件**，遇到截断或畸形的流会死循环占满一个 CPU 核；又因为解码方法是 `synchronized` 的，该线程会一直占住通道锁，导致后续请求全部阻塞（现象：只发出一个数据包、界面一直停在等待）。现加入无进展检测并抛出明确异常
+  - C# 侧的容器编码器与 Java 不一致：`pdfEncode` 产出的是**裸 deflate**，缺 zlib 头与 Adler32，客户端与 PDF 阅读器都无法解析；`pngIdatChunk` 在输入为空时**不写 deflate 块**，产生的 zlib 流永远结束不了。两者均已补齐
+  - `pdfEncode` 把 `out` 用作变量名（C# 保留字），生成的壳根本无法编译
+- **C# 载荷对抗升级**：`payloadsrc/` 新增 `Native.cs` / `Etw.cs` / `Hwbp.cs` 并重写 `Amsi.cs` —— ETW 静默**先于** AMSI（先断遥测，再做有痕迹的动作）；AMSI 优先用 VEH + 硬件断点（Dr0）拦截，**不修改系统模块的任何字节**（避开"内存页与磁盘镜像不一致"这类取证），被拒时才降级为字节补丁；同时修复 x86 下 stdcall 补丁桩少弹栈的问题
+
+- **Shell 多选一键分享**：「目标 → 分享链接（支持多选）」/ 右键「复制分享链接」把选中的多条 Shell 打包成一条 `gsl5://` 链接；导入端逐条还原并显示「共 N 条」。（此前多选导入本身可用，但「导入链接」菜单项的处理方法缺失、点了没反应，且右键「复制选中」复制的是单元格文本而非链接）
+- **导入链接对话框**：「目标 → 导入链接」改为弹出输入框 —— 空白框粘贴链接、可一键从剪贴板填入、剪贴板已是链接时自动预填
+- **界面响应性**：
+  - 列表刷新改为「立即出列表 + 后台补算归属地」，刷新后**保持选中行与滚动位置**（原来整表重建会丢选中、跳回顶部）
+  - 启动后台预热 IP 库；没有壁纸时表格不再走每格 alpha 合成的半透明包装
+  - 长操作有等待光标反馈（新增 `BusyCursor`），避免用户以为没点上而重复点击
+  - **主窗口开合动效（默认关闭）**：打开时展开、关闭时收起，两种样式 —— 绕竖轴 3D 旋转（近侧放大、远侧缩小变暗）/ 沿中缝对折；时长 60–900ms、延迟 0–2000ms 可调，在「配置 → 应用设置 → 界面效果 → 动效」开启并可点「预览」重播
+  - 导入链接失败不再静默吞异常：剪贴板确实是 `gsl5://` 链接却解析/入库失败时会弹窗给出原因
+- **快捷键**（主窗口聚焦时；弹出对话框时快捷键让路，`Enter` 归对话框的默认按钮）：
+  - `Enter` **打开选中的 Shell —— 仅当恰好选中一条时生效**；多选状态下按 `Enter` 不会打开（会提示"一次只能开一条"），避免误开错的那条。双击某一行同样可以打开
+  - `Delete` / `Backspace`（Enter 上方带 ← 的键）/ 小键盘 `Del`：**删除选中的 Shell，支持多选**，仍会弹确认框
+  - `Ctrl+A` 全选 · `Ctrl+C` 复制分享链接（支持多选）· `Ctrl+V` 导入链接 · `Ctrl+F` 关键字过滤 · `Esc` 关闭右键菜单
+  - 焦点在输入框里时全部快捷键不拦截（Backspace 正常删字符）
+- **数据库**：连接编码不再把 `Auto`（shell 的默认值）原样传给目标端 —— 会解析成该 Shell 的实际编码，修复达梦/金仓/MySQL 等连库时因 `characterEncoding=Auto` 报错
 
 ### 3.1.7.1（2026-09-07）
 - **生成窗口**：运行时 / 算法 / 后缀 / 混淆 / C2 模板集中在一个「生成」表单，不再连环弹窗

@@ -2,8 +2,6 @@ package core.ui.component.dialog;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -55,10 +53,10 @@ public class SafeFileSystemView extends FileSystemView {
         return v;
     }
 
-    /** Call before any JFileChooser is constructed. */
+    /** Keep Windows ShellFolder so the look-in combo still lists Desktop and drives. */
     public static void install() {
         try {
-            UIManager.put("FileChooser.useShellFolder", Boolean.FALSE);
+            UIManager.put("FileChooser.useShellFolder", Boolean.TRUE);
         } catch (Throwable ignored) {
         }
     }
@@ -114,27 +112,12 @@ public class SafeFileSystemView extends FileSystemView {
                 return fromDelegate;
             }
             return File.listRoots();
-        }, File.listRoots());
+        }, File.listRoots(), ROOT_PROBE_MS);
         if (raw == null || raw.length == 0) {
-            return new File[0];
+            File[] listed = File.listRoots();
+            return listed == null ? new File[0] : listed;
         }
-        List<File> ready = new ArrayList<File>();
-        List<Future<File>> probes = new ArrayList<Future<File>>();
-        for (final File root : raw) {
-            probes.add(POOL.submit(() -> existsSafe(root) ? root : null));
-        }
-        for (Future<File> probe : probes) {
-            try {
-                File f = probe.get(ROOT_PROBE_MS + 200L, TimeUnit.MILLISECONDS);
-                if (f != null) {
-                    ready.add(f);
-                }
-            } catch (TimeoutException te) {
-                probe.cancel(true);
-            } catch (Throwable ignored) {
-            }
-        }
-        return ready.toArray(new File[0]);
+        return raw;
     }
 
     @Override
@@ -151,12 +134,12 @@ public class SafeFileSystemView extends FileSystemView {
         if (f == null) {
             return Boolean.FALSE;
         }
-        Boolean ready = call(f::exists, Boolean.FALSE, ROOT_PROBE_MS);
-        if (ready == null || !ready.booleanValue()) {
-            return Boolean.FALSE;
+        if (delegate.isRoot(f) || delegate.isDrive(f) || delegate.isFileSystemRoot(f)
+                || delegate.isComputerNode(f)) {
+            return Boolean.TRUE;
         }
-        Boolean trav = call(() -> delegate.isTraversable(f), Boolean.FALSE);
-        return trav == null ? Boolean.FALSE : trav;
+        Boolean trav = call(() -> delegate.isTraversable(f), Boolean.TRUE, ROOT_PROBE_MS);
+        return trav == null ? Boolean.TRUE : trav;
     }
 
     @Override

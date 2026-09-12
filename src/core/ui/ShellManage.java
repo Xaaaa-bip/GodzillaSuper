@@ -9,6 +9,8 @@ import core.c2profile.c2annotation.C2ProfilePluginConfig;
 import core.imp.Payload;
 import core.imp.Plugin;
 import core.shell.ShellEntity;
+import core.ui.SvgIcons;
+import core.ui.component.PostExPluginHub;
 import core.ui.component.RTabbedPane;
 import core.ui.component.ShellBasicsInfo;
 import core.ui.component.ShellCopyTab;
@@ -214,29 +216,75 @@ public class ShellManage extends JFrame {
 
     private void loadView() {
         this.allViews.addAll(this.globalComponent.values());
-        for (String key : this.globalComponent.keySet()) {
-            JPanel panel = this.globalComponent.get(key);
-            EasyI18N.installObject((Object) panel);
-            String name = panel.getClass().getSimpleName();
-            DisplayName displayName = panel.getClass().getAnnotation(DisplayName.class);
-            if (displayName != null) {
-                name = EasyI18N.getI18nString((String) displayName.DisplayName());
-            }
-            EasyI18N.installObject((Object) panel);
-            this.tabbedPane.addTab(name, this.globalComponent.get(key));
+        String[] coreOrder = new String[]{
+            "BasicsInfo", "ExecCommand", "FileManage", "DatabaseManage", "Netstat", "Note"
+        };
+        for (int i = 0; i < coreOrder.length; i++) {
+            addCoreTab(coreOrder[i]);
         }
+        LinkedHashMap<String, Plugin> hubPlugins = new LinkedHashMap<String, Plugin>();
         for (String key : this.pluginMap.keySet()) {
             Plugin plugin = this.pluginMap.get(key);
+            if (plugin == null) {
+                continue;
+            }
             JPanel panel = plugin.getView();
-            PluginAnnotation pluginAnnotation = plugin.getClass().getAnnotation(PluginAnnotation.class);
             if (panel == null) {
                 continue;
             }
             EasyI18N.installObject((Object) plugin);
             EasyI18N.installObject((Object) panel);
-            this.tabbedPane.addTab(EasyI18N.getI18nString((String) pluginAnnotation.DisplayName()), panel);
             this.allViews.add(panel);
+            if (isSuperTerminalPlugin(plugin)) {
+                this.tabbedPane.addTab("\u8d85\u7ea7\u7ec8\u7aef", SvgIcons.of("terminal"), panel);
+            } else {
+                hubPlugins.put(key, plugin);
+            }
         }
+        if (!hubPlugins.isEmpty()) {
+            PostExPluginHub hub = new PostExPluginHub(hubPlugins);
+            this.allViews.add(hub);
+            this.tabbedPane.addTab("\u540e\u6e17\u900f", SvgIcons.of("postex"), hub);
+        }
+        addCoreTab("CopyTab");
+    }
+
+    private void addCoreTab(String key) {
+        JPanel panel = this.globalComponent.get(key);
+        if (panel == null) {
+            return;
+        }
+        EasyI18N.installObject((Object) panel);
+        this.tabbedPane.addTab(coreTabTitle(key, panel), SvgIcons.of(SvgIcons.coreTabKey(key)), panel);
+    }
+
+    private static String coreTabTitle(String key, JPanel panel) {
+        if ("BasicsInfo".equals(key)) {
+            return "\u57fa\u7840\u4fe1\u606f";
+        }
+        if ("ExecCommand".equals(key)) {
+            return "\u547d\u4ee4\u6267\u884c";
+        }
+        if ("FileManage".equals(key)) {
+            return "\u6587\u4ef6\u7ba1\u7406";
+        }
+        if ("DatabaseManage".equals(key)) {
+            return "\u6570\u636e\u5e93";
+        }
+        if ("Netstat".equals(key)) {
+            return "\u7f51\u7edc\u8fde\u63a5";
+        }
+        if ("Note".equals(key)) {
+            return "\u7b14\u8bb0";
+        }
+        if ("CopyTab".equals(key)) {
+            return "\u6807\u7b7e";
+        }
+        DisplayName displayName = panel.getClass().getAnnotation(DisplayName.class);
+        if (displayName != null) {
+            return EasyI18N.getI18nString((String) displayName.DisplayName());
+        }
+        return panel.getClass().getSimpleName();
     }
 
     public static String getCNName(String name) {
@@ -264,9 +312,20 @@ public class ShellManage extends JFrame {
         this.globalComponent.put("CopyTab", (JPanel) this.shellCopyTab);
     }
 
+    private static boolean isSuperTerminalPlugin(Plugin p) {
+        PluginAnnotation ann = p.getClass().getAnnotation(PluginAnnotation.class);
+        if (ann != null && "SuperTerminal".equalsIgnoreCase(ann.Name())) {
+            return true;
+        }
+        return p.getClass().getSimpleName().toLowerCase().contains("superterminal");
+    }
+
     private String getPluginName(Plugin p) {
         PluginAnnotation pluginAnnotation = p.getClass().getAnnotation(PluginAnnotation.class);
-        return pluginAnnotation.Name();
+        if (pluginAnnotation != null && pluginAnnotation.Name() != null && pluginAnnotation.Name().trim().length() > 0) {
+            return pluginAnnotation.Name();
+        }
+        return p.getClass().getSimpleName();
     }
 
     public Plugin createPlugin(String pluginName) {
@@ -314,6 +373,9 @@ public class ShellManage extends JFrame {
     private void loadPluginConfig(Plugin plugin) {
         Class<?> pluginClass = plugin.getClass();
         PluginAnnotation pluginAnnotation = pluginClass.getAnnotation(PluginAnnotation.class);
+        if (pluginAnnotation == null) {
+            return;
+        }
         try {
             Map configs;
             Map pluginConfigs;

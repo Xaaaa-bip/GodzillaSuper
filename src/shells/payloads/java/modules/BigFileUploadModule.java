@@ -192,9 +192,14 @@ public class BigFileUploadModule {
                     parentDir.mkdirs();
                 }
                 
-                try (RandomAccessFile raf = new RandomAccessFile(file, "rw")) {
+                // JDK 1.6: no try-with-resources.
+                RandomAccessFile raf = null;
+                try {
+                    raf = new RandomAccessFile(file, "rw");
                     raf.seek(position);
                     raf.write(content);
+                } finally {
+                    if (raf != null) { try { raf.close(); } catch (Exception ignored) {} }
                 }
                 
                 return "ok".getBytes();

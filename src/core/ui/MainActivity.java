@@ -13,10 +13,10 @@ import core.shell.ShellEntity;
 import core.ui.component.C2ProfileManage;
 import core.ui.component.DataView;
 import core.ui.component.AuroraBarPanel;
+import core.ui.component.FoldTransition;
 import core.ui.component.WallpaperLayerPanel;
 import core.ui.WallpaperTableStyle;
 import core.ui.component.OperationLogPanel;
-import core.ui.component.ShellGroup;
 import core.ui.component.dialog.AppSetingDialog;
 import core.ui.component.dialog.GOptionPane;
 import core.ui.component.dialog.GenerateShellLoder;
@@ -81,8 +81,9 @@ import javax.swing.JComboBox;
 import javax.swing.JTable;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
- import javax.swing.tree.DefaultTreeCellRenderer;
-import javax.swing.tree.TreeCellRenderer;
+import javax.swing.DefaultListModel;
+import javax.swing.JList;
+import javax.swing.ListSelectionModel;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -111,6 +112,8 @@ public class MainActivity extends JFrame {
     private static final Pattern LOG_LINE_SUPER = Pattern.compile(
             "\\[[^]]+] Time:\\d{4}-\\d{2}-\\d{2} (\\d{2}:\\d{2}:\\d{2}) LastStackTrace:.* ThreadId:\\d+ Message: (.*)");
     private static final String SHELL_TABLE_COL_LOCATION = "\u5f52\u5c5e\u5730";
+    private static final String KIND_HTTP = "http";
+    private static final String KIND_DB = "db";
     private static final String GSL_EXPORT_PROTO = "gsl5://import?data=";
     private static final String FIELD_SEPARATOR = "";
     private static final String RECORD_SEPARATOR = "";
@@ -134,11 +137,14 @@ public class MainActivity extends JFrame {
     private JSplitPane splitPane;
     private JSplitPane verticalMainSplit;
     private OperationLogPanel operationLogPanel;
-    private ShellGroup shellGroupTree;
+    private JList<String> kindList;
+    private DefaultListModel<String> kindModel;
+    private String currentKind;
     private String currentGroup;
     private JLabel statusLabel;
     private AuroraBarPanel statusAuroraPanel;
     private JMenuItem copyselectItem;
+    private JMenuItem shareLinksItem;
     private JMenuItem interactMenuItem;
     private JMenuItem interactCacheMenuItem;
     private JMenuItem removeShell;
@@ -147,6 +153,9 @@ public class MainActivity extends JFrame {
     private JPanel mainRootPanel;
     private JLabel targetIndicatorLabel;
     private WallpaperLayerPanel wallpaperLayer;
+    private core.ui.component.UiToneOverlay toneOverlay;
+    /** 启动时的开合动效句柄（windowOpened 后 start()） */
+    private FoldTransition.Pending pendingFold;
     private JScrollPane shellGroupScrollPane;
 
     private static void hideShellViewPopupLater() {
@@ -228,6 +237,7 @@ public class MainActivity extends JFrame {
     private void initVariable() {
         this.setLayout(new BorderLayout(2, 2));
         this.currentGroup = "/";
+        this.currentKind = KIND_HTTP;
         this.operationLogPanel = new OperationLogPanel();
         OperationLogRuntime.bootstrap(this.operationLogPanel);
         if (!stdoutTeeInstalled) {
@@ -240,7 +250,8 @@ public class MainActivity extends JFrame {
         this.statusLabel.setOpaque(false);
         this.statusLabel.setForeground(ModernUi.STATUS_BAR_FG);
         this.statusAuroraPanel = new AuroraBarPanel(AuroraBarPanel.Variant.STATUS_DARK);
-        this.statusAuroraPanel.add(this.statusLabel, BorderLayout.WEST);
+        this.statusLabel.setMinimumSize(new Dimension(0, 18));
+        this.statusAuroraPanel.add(this.statusLabel, BorderLayout.CENTER);
         this.targetIndicatorLabel = new JLabel("localdb");
         this.targetIndicatorLabel.setForeground(Color.GRAY);
         this.targetIndicatorLabel.setFont(this.targetIndicatorLabel.getFont().deriveFont(Font.BOLD));
@@ -258,13 +269,31 @@ public class MainActivity extends JFrame {
         this.shellView.setFillsViewportHeight(true);
         WallpaperTableStyle.applyToShellTable(this.shellView);
         this.splitPane = new JSplitPane(1);
-        this.shellGroupTree = new ShellGroup();
+        this.kindModel = new DefaultListModel<String>();
+        this.kindList = new JList<String>(this.kindModel);
+        this.kindList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        this.kindList.setFixedCellHeight(24);
+        this.refreshKindList();
+        this.kindList.setSelectedIndex(0);
+        this.kindList.addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting()) {
+                return;
+            }
+            int idx = this.kindList.getSelectedIndex();
+            String next = kindFromIndex(idx);
+            if (next.equals(this.currentKind)) {
+                return;
+            }
+            this.currentKind = next;
+            OperationAuditLog.ui("\u4e3b\u754c\u9762", "\u5207\u6362\u5206\u7ec4", kindLabel(next));
+            this.refreshShellView();
+        });
         this.splitPane.setRightComponent(this.shellViewScrollPane = new JScrollPane(this.shellView));
         this.shellViewScrollPane.setBorder(BorderFactory.createEmptyBorder());
-        this.splitPane.setLeftComponent(this.shellGroupScrollPane = new JScrollPane(this.shellGroupTree));
-        this.shellGroupScrollPane.setMinimumSize(new Dimension(0, 0));
-        this.shellGroupTree.setMinimumSize(new Dimension(0, 0));
-        this.shellGroupScrollPane.getViewport().setMinimumSize(new Dimension(0, 0));
+        this.splitPane.setLeftComponent(this.shellGroupScrollPane = new JScrollPane(this.kindList));
+        this.shellGroupScrollPane.setMinimumSize(new Dimension(120, 0));
+        this.kindList.setMinimumSize(new Dimension(120, 0));
+        this.shellGroupScrollPane.getViewport().setMinimumSize(new Dimension(120, 0));
         this.verticalMainSplit = new JSplitPane(0, this.splitPane, this.operationLogPanel);
         this.verticalMainSplit.setResizeWeight(0.74);
         this.verticalMainSplit.setOneTouchExpandable(true);
@@ -292,14 +321,18 @@ public class MainActivity extends JFrame {
         addShellMenuItem.setActionCommand("addShell");
         JMenuItem addDatabaseShellMenuItem = new JMenuItem("\u6dfb\u52a0\u6570\u636e\u5e93Shell");
         addDatabaseShellMenuItem.setActionCommand("addDatabaseShell");
+        JMenuItem exportLinksMenuItem = new JMenuItem("\u5206\u4eab\u94fe\u63a5\uff08\u652f\u6301\u591a\u9009\uff09");
+        exportLinksMenuItem.setActionCommand("exportLinks");
         JMenuItem importLinkMenuItem = new JMenuItem("\u5bfc\u5165\u94fe\u63a5");
         importLinkMenuItem.setActionCommand("importLink");
         this.targetMenu.add(addShellMenuItem);
         this.targetMenu.add(addDatabaseShellMenuItem);
         this.targetMenu.addSeparator();
+        this.targetMenu.add(exportLinksMenuItem);
         this.targetMenu.add(importLinkMenuItem);
         bindAutoHidePopup(addShellMenuItem);
         bindAutoHidePopup(addDatabaseShellMenuItem);
+        bindAutoHidePopup(exportLinksMenuItem);
         bindAutoHidePopup(importLinkMenuItem);
         this.attackMenu = new JMenu("\u653b\u51fb");
         JMenuItem shellLiveScanMenuItem = new JMenuItem("\u5b58\u6d3b\u626b\u63cf");
@@ -339,26 +372,57 @@ public class MainActivity extends JFrame {
         checkUpdateMenuItem.setActionCommand("checkUpdate");
         this.aboutMenu.add(checkUpdateMenuItem);
         bindAutoHidePopup(checkUpdateMenuItem);
-        this.shellGroupTree.setActionDbclick((e) -> {
-            String nextGroup = this.shellGroupTree.GetSelectFile().trim();
-            OperationAuditLog.ui("\u4e3b\u754c\u9762", "\u5207\u6362\u5206\u7ec4", nextGroup);
-            this.currentGroup = nextGroup;
-            this.refreshShellView();
+        JMenu dataSourceMenu = new JMenu("\u6570\u636e\u6e90");
+        JMenuItem dataSourceMenuItem = new JMenuItem("\u6253\u5f00");
+        dataSourceMenuItem.setActionCommand("dataSource");
+        dataSourceMenu.add(dataSourceMenuItem);
+        bindAutoHidePopup(dataSourceMenuItem);
+        dataSourceMenu.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mousePressed(java.awt.event.MouseEvent e) {
+                if (!SwingUtilities.isLeftMouseButton(e)) {
+                    return;
+                }
+                MenuSelectionManager.defaultManager().clearSelectedPath();
+                SwingUtilities.invokeLater(() -> MainActivity.this.dataSourceMenuItemClick(null));
+            }
         });
+        SvgIcons.apply(this.targetMenu, "target");
+        SvgIcons.apply(addShellMenuItem, "add");
+        SvgIcons.apply(addDatabaseShellMenuItem, "database");
+        SvgIcons.apply(exportLinksMenuItem, "copy");
+        SvgIcons.apply(importLinkMenuItem, "import");
+        SvgIcons.apply(this.attackMenu, "attack");
+        SvgIcons.apply(generateShellMenuItem, "generate");
+        SvgIcons.apply(shellLiveScanMenuItem, "scan");
+        SvgIcons.apply(this.configMenu, "settings");
+        SvgIcons.apply(c2ProfileConfigMenuItem, "settings");
+        SvgIcons.apply(appConfigMenuItem, "settings");
+        SvgIcons.apply(pluginConfigMenuItem, "plugin");
+        SvgIcons.apply(operationAuditLogMenuItem, "log");
+        SvgIcons.apply(teamOpLogMenuItem, "team");
+        SvgIcons.apply(this.aboutMenu, "update");
+        SvgIcons.apply(sponsorMenuItem, "heart");
+        SvgIcons.apply(checkUpdateMenuItem, "update");
+        SvgIcons.apply(dataSourceMenu, "database");
+        SvgIcons.apply(dataSourceMenuItem, "open");
+        SvgIcons.apply(pluginMenu, "plugin");
         menuBar.add(this.targetMenu);
         menuBar.add(this.attackMenu);
         menuBar.add(this.configMenu);
         menuBar.add(pluginMenu);
+        menuBar.add(dataSourceMenu);
         menuBar.add(this.aboutMenu);
         menuBarAboutMenu = this.aboutMenu;
-        menuBar.add(Box.createHorizontalGlue());
         menuBar.add(this.targetIndicatorLabel);
+        menuBar.add(Box.createHorizontalGlue());
         flushPendingMenusForMenuBar();
         this.setJMenuBar(menuBar);
         registerMcpMenuItem();
         automaticBindClick.bindMenuItemClick(menuBar, (Map) null, this);
         this.copyselectItem = new JMenuItem("\u590d\u5236\u9009\u4e2d");
         this.copyselectItem.setActionCommand("copyShellViewSelected");
+        this.shareLinksItem = new JMenuItem("\u590d\u5236\u5206\u4eab\u94fe\u63a5\uff08\u652f\u6301\u591a\u9009\uff09");
+        this.shareLinksItem.setActionCommand("copyShareLinks");
         this.interactMenuItem = new JMenuItem("\u4ea4\u4e92");
         this.interactMenuItem.setActionCommand("interact");
         this.interactCacheMenuItem = new JMenuItem("\u8fdb\u5165\u7f13\u5b58");
@@ -369,9 +433,17 @@ public class MainActivity extends JFrame {
         this.editShell.setActionCommand("editShell");
         this.refreshShell = new JMenuItem("\u5237\u65b0");
         this.refreshShell.setActionCommand("refreshShellView");
+        SvgIcons.apply(this.interactMenuItem, "interact");
+        SvgIcons.apply(this.interactCacheMenuItem, "cache");
+        SvgIcons.apply(this.copyselectItem, "copy");
+        SvgIcons.apply(this.shareLinksItem, "copy");
+        SvgIcons.apply(this.removeShell, "delete");
+        SvgIcons.apply(this.editShell, "edit");
+        SvgIcons.apply(this.refreshShell, "refresh");
         shellViewPopupMenu.add(this.interactMenuItem);
         shellViewPopupMenu.add(this.interactCacheMenuItem);
         shellViewPopupMenu.add(this.copyselectItem);
+        shellViewPopupMenu.add(this.shareLinksItem);
         shellViewPopupMenu.add(this.removeShell);
         shellViewPopupMenu.add(this.editShell);
         shellViewPopupMenu.add(this.refreshShell);
@@ -382,6 +454,8 @@ public class MainActivity extends JFrame {
         bindAutoHidePopup(this.editShell);
         bindAutoHidePopup(this.refreshShell);
         this.shellView.setRightClickMenu(shellViewPopupMenu);
+        // 双击直接打开交互窗口（此前从没绑过，双击没反应）
+        this.shellView.setActionDblClick(ev -> openSelectedShell());
         automaticBindClick.bindMenuItemClick(shellViewPopupMenu, (Map) null, this);
         this.installGenerateDialogAutoCloseListener();
         shellViewPopupMenu.addPopupMenuListener(new PopupMenuListener() {
@@ -427,16 +501,63 @@ public class MainActivity extends JFrame {
         this.addWindowListener(new WindowAdapter() {
             @Override
             public void windowOpened(WindowEvent e) {
-                SwingUtilities.invokeLater(() -> MainActivity.this.applySplitDividerProportions());
+                SwingUtilities.invokeLater(() -> {
+                    MainActivity.this.applySplitDividerProportions();
+                    // 布局稳定后再起展开动画（快照才是最终界面）
+                    if (MainActivity.this.pendingFold != null) {
+                        FoldTransition.Pending p = MainActivity.this.pendingFold;
+                        MainActivity.this.pendingFold = null;
+                        p.start();
+                    }
+                });
+            }
+
+            @Override
+            public void windowClosing(WindowEvent e) {
+                MainActivity.this.exitWithFold();
             }
         });
         this.setLocationRelativeTo((Component) null);
         this.applyUiEffectsFromSettings();
         this.installGlobalKeyboardHandler();
+        this.installToneOverlay();
+        // 后台预热 IP 库（首次查询要读 ipdb，放 EDT 上会卡）
+        new Thread(() -> IpLocationService.init(), "gsl5-ipdb-warm").start();
+        // 先装覆盖层（不抓快照），窗口可见且布局完成后由 windowOpened 触发 start()
+        if (ModernUi.isFoldAnimEnabled() && FoldTransition.isAvailable()) {
+            this.pendingFold = FoldTransition.foldOpen(this, this.toneOverlay,
+                    ModernUi.getFoldDurationMs(), ModernUi.getFoldDelayMs(), ModernUi.isFoldRotate());
+        }
         this.setVisible(true);
-        this.setDefaultCloseOperation(3);
-        // startup silent check; only prompts if update available
-        SwingUtilities.invokeLater(() -> checkForUpdate(true));
+        this.setDefaultCloseOperation(javax.swing.WindowConstants.DO_NOTHING_ON_CLOSE);
+    }
+
+    /** 关闭主窗口：开了动效就先播收起动画，再真正退出（等价于原来的 EXIT_ON_CLOSE）。 */
+    private void exitWithFold() {
+        if (ModernUi.isFoldAnimEnabled() && FoldTransition.isAvailable() && isShowing()) {
+            FoldTransition.foldClose(this, this.toneOverlay, ModernUi.getFoldDurationMs(),
+                    ModernUi.isFoldRotate(), new Runnable() {
+                        public void run() {
+                            MainActivity.this.dispose();
+                            System.exit(0);
+                        }
+                    });
+        } else {
+            this.dispose();
+            System.exit(0);
+        }
+    }
+
+    /** 设置面板「预览」按钮：按当前设置重播一次展开动效。 */
+    public void replayFoldPreview() {
+        if (!isShowing() || !FoldTransition.isAvailable()) {
+            return;
+        }
+        FoldTransition.Pending p = FoldTransition.foldOpen(this, this.toneOverlay,
+                ModernUi.getFoldDurationMs(), ModernUi.getFoldDelayMs(), ModernUi.isFoldRotate());
+        if (p != null) {
+            p.start();
+        }
     }
 
     private void installGlobalKeyboardHandler() {
@@ -446,23 +567,64 @@ public class MainActivity extends JFrame {
                     return false;
                 }
                 Window activeWindow = KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow();
-                if (activeWindow != MainActivity.this && !isChildWindowOf(activeWindow, MainActivity.this)) {
-                    return false;
-                }
-                if (!e.isControlDown()) {
-                    return false;
+                if (activeWindow != MainActivity.this) {
+                    // 前台的对话框（确认框 / 设置框）优先：Enter 归它的默认按钮、Esc 归取消，
+                    // 否则确认删除时按 Enter 会被抢成"打开选中 Shell"
+                    if (activeWindow instanceof java.awt.Dialog) {
+                        return false;
+                    }
+                    if (!isChildWindowOf(activeWindow, MainActivity.this)) {
+                        return false;
+                    }
                 }
                 if (isTextInputFocus()) {
                     return false;
                 }
-                if (e.getKeyCode() == KeyEvent.VK_C) {
+                final boolean ctrl = e.isControlDown();
+                final int code = e.getKeyCode();
+                if (ctrl && code == KeyEvent.VK_C) {
                     if (shellView.getSelectedRowCount() > 0) {
                         SwingUtilities.invokeLater(() -> exportSelectedShells());
                         return true;
                     }
-                } else if (e.getKeyCode() == KeyEvent.VK_V) {
+                } else if (ctrl && code == KeyEvent.VK_V) {
                     SwingUtilities.invokeLater(() -> importShellsFromClipboard());
                     return true;
+                } else if (ctrl && code == KeyEvent.VK_A) {
+                    if (shellView.getRowCount() > 0) {
+                        shellView.selectAll();
+                        return true;
+                    }
+                } else if (ctrl && code == KeyEvent.VK_F) {
+                    SwingUtilities.invokeLater(() -> showQuickFilterDialog());
+                    return true;
+                } else if (!ctrl && code == KeyEvent.VK_ENTER) {
+                    // 普通 Enter：只在"恰好选中一条"时打开交互窗口（否则会被 JTable 当成"下移一行"）。
+                    // 多选时不打开——一次只能开一个，避免误开错的那条；删除用 Del/Backspace。
+                    final int selCount = shellView.getSelectedRowCount();
+                    if (selCount == 1) {
+                        SwingUtilities.invokeLater(() -> openSelectedShell());
+                        return true;
+                    } else if (selCount > 1) {
+                        SwingUtilities.invokeLater(() -> GOptionPane.showMessageDialog(getMainActivityFrame(),
+                                "当前选中 " + selCount + " 条，Enter 只能打开一条。\n"
+                                        + "请只选中一条后按 Enter（双击该行也可以）；删除多条请用 Delete / Backspace。",
+                                "提示", 1));
+                        return true;
+                    }
+                } else if (!ctrl && (code == KeyEvent.VK_DELETE || code == KeyEvent.VK_DECIMAL
+                        || code == KeyEvent.VK_BACK_SPACE)) {
+                    // 主键盘 Del / 小键盘 Del(NumLock 开时是 VK_DECIMAL) / Backspace(Enter 上方带箭头的键) 都当删除
+                    if (shellView.getSelectedRowCount() > 0) {
+                        final int n = shellView.getSelectedRowCount();
+                        if (operationLogPanel != null) {
+                            operationLogPanel.appendLine("[快捷键] Delete：删除选中的 " + n + " 条 Shell");
+                        }
+                        SwingUtilities.invokeLater(() -> removeShellMenuItemClick(null));
+                        return true;
+                    }
+                } else if (code == KeyEvent.VK_ESCAPE) {
+                    hideShellViewPopupMenu();
                 }
                 return false;
             }
@@ -494,6 +656,73 @@ public class MainActivity extends JFrame {
             owner = owner.getOwner();
         }
         return false;
+    }
+
+    public void setUiBrightness(int value) {
+        if (this.toneOverlay != null) {
+            this.toneOverlay.setBrightness(value);
+        }
+    }
+
+    public void setUiGrayscale(int value) {
+        if (this.toneOverlay != null) {
+            this.toneOverlay.setGrayscale(value);
+        }
+    }
+
+    public static int readUiToneSetting(String key, int fallback) {
+        return readUiTone(key, fallback);
+    }
+
+    private void installToneOverlay() {
+        this.toneOverlay = new core.ui.component.UiToneOverlay();
+        this.toneOverlay.setBrightness(readUiTone("ui-brightness", 50));
+        this.toneOverlay.setGrayscale(readSavedGrayscale());
+        this.setGlassPane(this.toneOverlay);
+        this.toneOverlay.setVisible(true);
+    }
+
+    public static int readSavedGrayscale() {
+        if (!Db.existsSetingKey("ui-tone-saved")) {
+            return 0;
+        }
+        return readUiTone("ui-grayscale", 0);
+    }
+
+    private static int readUiTone(String key, int fallback) {
+        try {
+            String s = Db.tryGetSetingValue(key, String.valueOf(fallback));
+            return Integer.parseInt(s.trim());
+        } catch (Exception e) {
+            return fallback;
+        }
+    }
+
+    private static void switchLocalDb() {
+        try {
+            java.lang.reflect.Field f = Db.class.getDeclaredField("dbConn");
+            f.setAccessible(true);
+            java.sql.Connection old = (java.sql.Connection) f.get(null);
+            Class.forName("org.sqlite.JDBC");
+            java.sql.Connection c = java.sql.DriverManager.getConnection("jdbc:sqlite:data.db");
+            try (java.sql.Statement s = c.createStatement()) {
+                s.execute("PRAGMA journal_mode=WAL");
+            } catch (Exception ignored) {
+            }
+            f.set(null, c);
+            isRemoteDb = false;
+            remoteDbUrl = "";
+            if (old != null && !old.isClosed()) {
+                try {
+                    old.close();
+                } catch (Exception ex) {
+                }
+            }
+            Log.log("Switched Db to local data.db");
+        } catch (Exception e) {
+            Log.error(e);
+            javax.swing.JOptionPane.showMessageDialog(null, "\u5207\u636e\u672c\u5730\u5e93\u5931\u8d25: " + e.getMessage());
+        }
     }
 
     public void applyUiEffectsFromSettings() {
@@ -587,31 +816,23 @@ public class MainActivity extends JFrame {
     }
 
     private void configureShellGroupTree(float scale) {
-        if (this.shellGroupTree == null) {
+        if (this.kindList == null) {
             return;
         }
         float tight = Math.min(scale, 1.03f);
-        int rowH = Math.max(18, Math.min(22, Math.round(19 * tight)));
-        this.shellGroupTree.setRowHeight(rowH);
-        this.shellGroupTree.setOpaque(false);
-        this.shellGroupTree.setBackground(new Color(255, 255, 255, 0));
+        int rowH = Math.max(22, Math.min(28, Math.round(24 * tight)));
+        this.kindList.setFixedCellHeight(rowH);
+        this.kindList.setOpaque(false);
+        this.kindList.setBackground(new Color(255, 255, 255, 0));
         if (this.shellGroupScrollPane != null) {
             this.shellGroupScrollPane.getViewport().setBackground(new Color(255, 255, 255, 0));
-        }
-        TreeCellRenderer base = this.shellGroupTree.getCellRenderer();
-        if (base instanceof DefaultTreeCellRenderer) {
-            DefaultTreeCellRenderer r = (DefaultTreeCellRenderer) base;
-            int inset = Math.max(0, Math.round(2 * tight));
-            r.setBorder(BorderFactory.createEmptyBorder(0, inset, 0, inset));
-        }
-        if (this.shellGroupScrollPane != null) {
             this.shellGroupScrollPane.setBorder(BorderFactory.createEmptyBorder());
         }
     }
 
     private void applySplitDividerProportions() {
         if (this.splitPane.getWidth() > 0) {
-            this.splitPane.setDividerLocation(0);
+            this.splitPane.setDividerLocation(168);
         }
         if (this.verticalMainSplit.getHeight() > 0) {
             this.verticalMainSplit.setDividerLocation(0.74);
@@ -750,6 +971,47 @@ public class MainActivity extends JFrame {
         this.hideShellViewPopupMenu();
         OperationAuditLog.ui("\u4e3b\u754c\u9762", "\u5b58\u6d3b\u626b\u63cf", "\u5206\u7ec4: " + this.currentGroup);
         new LiveScan(this.currentGroup);
+    }
+
+    private boolean dataSourceDialogBusy;
+
+    private void dataSourceMenuItemClick(ActionEvent e) {
+        if (this.dataSourceDialogBusy) {
+            return;
+        }
+        this.dataSourceDialogBusy = true;
+        this.hideShellViewPopupMenu();
+        StartupModeDialog.DbConfig cfg;
+        try {
+            cfg = StartupModeDialog.showDialog(this);
+        } catch (Throwable t) {
+            Log.error(t);
+            GOptionPane.showMessageDialog(this, "\u6253\u5f00\u6570\u636e\u6e90\u5931\u8d25: " + t.getMessage(), "\u6570\u636e\u6e90", 2);
+            return;
+        } finally {
+            this.dataSourceDialogBusy = false;
+        }
+        if (cfg == null) {
+            return;
+        }
+        operatorName = cfg.operatorName;
+        if (cfg.isPg) {
+            swiitchDb(cfg);
+            if (!isRemoteDb) {
+                return;
+            }
+            ensureAllTables();
+        } else {
+            switchLocalDb();
+        }
+        this.currentGroup = "/";
+        this.currentKind = KIND_HTTP;
+        this.refreshShellView();
+        if (this.kindList != null) {
+            this.kindList.setSelectedIndex(0);
+        }
+        this.updateTargetIndicator();
+        OperationAuditLog.ui("\u4e3b\u754c\u9762", "\u52a0\u8f7d\u6570\u636e\u6e90", cfg.isPg ? cfg.dbPath : "localdb");
     }
 
     private void pluginConfigMenuItemClick(ActionEvent e) {
@@ -1041,6 +1303,17 @@ public class MainActivity extends JFrame {
         }
     }
 
+    private void exportLinksMenuItemClick(ActionEvent e) {
+        this.hideShellViewPopupMenu();
+        exportSelectedShells();
+    }
+
+    private void copyShareLinksMenuItemClick(ActionEvent e) {
+        this.hideShellViewPopupMenu();
+        exportSelectedShells();
+    }
+
+    /** 把当前选中的所有 Shell 打包成一个 gsl5:// 链接放进剪贴板（多选即多条）。 */
     private void exportSelectedShells() {
         String[] shellIds = this.getSlectedShellId();
         if (shellIds.length == 0) {
@@ -1079,19 +1352,79 @@ public class MainActivity extends JFrame {
         }
     }
 
+    /** Ctrl+V：剪贴板里是 gsl5:// 链接就直接导入（带确认）。 */
     private void importShellsFromClipboard() {
+        String clip = readClipboardString();
+        if (clip == null || !clip.trim().startsWith(GSL_EXPORT_PROTO)) {
+            return;
+        }
+        importShellsFromText(clip, true);
+    }
+
+    /** 菜单「目标 → 导入链接」：弹出输入框，粘贴链接后点「导入」。 */
+    private void importLinkMenuItemClick(ActionEvent e) {
+        this.hideShellViewPopupMenu();
+        showImportLinkDialog();
+    }
+
+    private String readClipboardString() {
         try {
             Transferable trans = Toolkit.getDefaultToolkit().getSystemClipboard().getContents(null);
             if (trans == null || !trans.isDataFlavorSupported(DataFlavor.stringFlavor)) {
-                return;
+                return null;
             }
-            String clipboardText = (String) trans.getTransferData(DataFlavor.stringFlavor);
-            if (clipboardText == null || !clipboardText.startsWith(GSL_EXPORT_PROTO)) {
-                return;
+            return (String) trans.getTransferData(DataFlavor.stringFlavor);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 导入链接对话框：空白输入框 + 从剪贴板粘贴 + 导入。 */
+    private void showImportLinkDialog() {
+        final JTextArea area = new JTextArea(8, 76);
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
+        String clip = readClipboardString();
+        if (clip != null && clip.trim().startsWith(GSL_EXPORT_PROTO)) {
+            area.setText(clip.trim());
+        }
+        JPanel panel = new JPanel(new BorderLayout(6, 8));
+        panel.add(new JLabel("<html>\u628a <code>gsl5://import?data=...</code> \u94fe\u63a5\u7c98\u8d34\u5230\u4e0b\u9762\uff0c\u70b9\u300c\u5bfc\u5165\u300d\u3002<br/>"
+                + "\u4e00\u6761\u94fe\u63a5\u53ef\u5305\u542b\u591a\u4e2a Shell\uff08\u5206\u4eab\u65f6\u591a\u9009\u5373\u53ef\uff09\u3002</html>"), BorderLayout.NORTH);
+        panel.add(new JScrollPane(area), BorderLayout.CENTER);
+        JPanel south = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        JButton pasteBtn = new JButton("\u4ece\u526a\u8d34\u677f\u7c98\u8d34");
+        pasteBtn.addActionListener(ev -> {
+            String t = readClipboardString();
+            if (t != null && !t.trim().isEmpty()) {
+                area.setText(t.trim());
             }
-            int q = GOptionPane.showConfirmDialog(getMainActivityFrame(),
-                    "\u68c0\u6d4b\u5230\u526a\u8d34\u677f\u4e2d\u7684Shell\u5bfc\u5165\u94fe\u63a5\uff0c\u662f\u5426\u7acb\u5373\u5bfc\u5165\uff1f", "\u5bfc\u5165Shell", 0);
-            if (q != 0) {
+        });
+        south.add(pasteBtn);
+        panel.add(south, BorderLayout.SOUTH);
+        panel.setPreferredSize(new Dimension(660, 280));
+        int r = GOptionPane.showConfirmDialog(this, panel, "\u5bfc\u5165\u94fe\u63a5",
+                GOptionPane.OK_CANCEL_OPTION, GOptionPane.PLAIN_MESSAGE);
+        if (r != GOptionPane.OK_OPTION) {
+            return;
+        }
+        String text = area.getText();
+        if (text == null || text.trim().isEmpty()) {
+            GOptionPane.showMessageDialog(this, "\u8bf7\u5148\u7c98\u8d34\u94fe\u63a5", "\u63d0\u793a",
+                    GOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        importShellsFromText(text, false);
+    }
+
+    /** 真正的导入：rawText 是完整 gsl5:// 链接；confirm=true 时先弹确认框（Ctrl+V 路径用）。 */
+    private void importShellsFromText(String rawText, boolean confirm) {
+        try {
+            String clipboardText = rawText == null ? "" : rawText.trim();
+            if (!clipboardText.startsWith(GSL_EXPORT_PROTO)) {
+                GOptionPane.showMessageDialog(getMainActivityFrame(),
+                        "\u4e0d\u662f\u6709\u6548\u7684 gsl5:// \u5bfc\u5165\u94fe\u63a5", "\u63d0\u793a",
+                        GOptionPane.WARNING_MESSAGE);
                 return;
             }
             String encoded = clipboardText.substring(GSL_EXPORT_PROTO.length()).trim();
@@ -1106,6 +1439,20 @@ public class MainActivity extends JFrame {
             gzis.close();
             String data = new String(rawBytes, StandardCharsets.UTF_8);
             String[] records = data.split(RECORD_SEPARATOR, -1);
+            int recordCount = 0;
+            for (String r : records) {
+                if (r != null && !r.trim().isEmpty()) {
+                    recordCount++;
+                }
+            }
+
+            if (confirm) {
+                int q = GOptionPane.showConfirmDialog(getMainActivityFrame(),
+                        "\u68c0\u6d4b\u5230\u526a\u8d34\u677f\u4e2d\u7684 Shell \u5bfc\u5165\u94fe\u63a5\uff08\u5171 " + recordCount + " \u6761\uff09\uff0c\u662f\u5426\u7acb\u5373\u5bfc\u5165\uff1f", "\u5bfc\u5165Shell", 0);
+                if (q != 0) {
+                    return;
+                }
+            }
             java.util.ArrayList<String> importUrls = new java.util.ArrayList<>(); int addedCount = 0;
             int skipCount = 0;
             for (String record : records) {
@@ -1193,7 +1540,9 @@ public class MainActivity extends JFrame {
                     "\u5bfc\u5165\u5b8c\u6210! \u6210\u529f: " + addedCount + " \u6761, \u8df3\u8fc7: " + skipCount + " \u6761", "\u63d0\u793a", 1);
             this.refreshShellView();
         } catch (Exception e) {
-            // Silently ignore non-GSL5 clipboard content
+            Log.error(e);
+            GOptionPane.showMessageDialog(getMainActivityFrame(),
+                    "导入失败: " + e, "错误", GOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -1262,9 +1611,7 @@ public class MainActivity extends JFrame {
 
     private void updateStatusBarText(int tableRows) {
         int totalShells = Db.getAllShell().size() - 1;
-        String filterLabel = "/".equals(this.currentGroup)
-                ? "\u5168\u90e8"
-                : this.currentGroup;
+        String filterLabel = kindLabel(this.currentKind);
         File homeDb = new File(new File(System.getProperty("user.home")), ".webshell-manager/data.db");
         String dbPath = homeDb.isFile() ? homeDb.getAbsolutePath() : new File("data.db").getAbsolutePath();
         this.statusLabel.setText(String.format(
@@ -1309,23 +1656,200 @@ public class MainActivity extends JFrame {
         }
     }
 
-    public void refreshShellView() {
-        Vector<Vector<String>> rowsVector = null;
-        if (this.currentGroup.equals("/")) {
-            rowsVector = Db.getAllShell();
-        } else {
-            rowsVector = Db.getAllShell(this.currentGroup);
-        }
+    /** 快捷键 Ctrl+F 的过滤词（空 = 不过滤）。 */
+    private String quickFilter = "";
 
-        rowsVector.remove(0);
-        this.enrichShellRowsWithIpLocation(rowsVector);
+    /** 记录当前选中行的 Shell id（整表重建后按 id 还原选中）。 */
+    private String[] selectedShellIds() {
+        int[] rows = this.shellView.getSelectedRows();
+        String[] ids = new String[rows.length];
+        for (int i = 0; i < rows.length; i++) {
+            Object v = this.shellView.getValueAt(rows[i], 0);
+            ids[i] = v == null ? null : v.toString();
+        }
+        return ids;
+    }
+
+    /** 按 id 还原选中，并恢复滚动位置。 */
+    private void restoreSelection(String[] ids, int scroll) {
+        if (ids != null && ids.length > 0) {
+            javax.swing.ListSelectionModel sm = this.shellView.getSelectionModel();
+            sm.clearSelection();
+            for (int r = 0; r < this.shellView.getRowCount(); r++) {
+                Object v = this.shellView.getValueAt(r, 0);
+                if (v == null) continue;
+                String id = v.toString();
+                for (String want : ids) {
+                    if (id.equals(want)) {
+                        sm.addSelectionInterval(r, r);
+                        break;
+                    }
+                }
+            }
+        }
+        if (scroll > 0 && this.shellViewScrollPane != null) {
+            SwingUtilities.invokeLater(() -> this.shellViewScrollPane.getVerticalScrollBar().setValue(scroll));
+        }
+    }
+
+    /** 后台计算「归属地」再回 EDT 只更新那一列（列表先出，不阻塞）。 */
+    private void fillIpLocationsAsync() {
+        final int n = this.shellView.getRowCount();
+        if (n == 0) return;
+        final String[] urls = new String[n];
+        final String[] ids = new String[n];
+        for (int r = 0; r < n; r++) {
+            urls[r] = String.valueOf(this.shellView.getValueAt(r, 1));
+            Object id = this.shellView.getValueAt(r, 0);
+            ids[r] = id == null ? null : id.toString();
+        }
+        final int col = this.shellView.getColumnCount() - 1;
+        new Thread(() -> {
+            IpLocationService.init();
+            final String[] loc = new String[n];
+            for (int r = 0; r < n; r++) {
+                try {
+                    loc[r] = IpLocationService.lookupUrl(urls[r]);
+                } catch (Throwable ignored) {
+                    loc[r] = "";
+                }
+            }
+            SwingUtilities.invokeLater(() -> {
+                for (int r = 0; r < this.shellView.getRowCount() && r < n; r++) {
+                    Object id = this.shellView.getValueAt(r, 0);
+                    if (id == null || !id.toString().equals(ids[r])) continue; // 列表变了就跳过该行
+                    this.shellView.setValueAt(loc[r], r, col);
+                }
+            });
+        }, "gsl5-ipdb").start();
+    }
+
+    private Vector<Vector<String>> applyQuickFilter(Vector<Vector<String>> rows) {
+        if (this.quickFilter == null || this.quickFilter.trim().isEmpty()) return rows;
+        String q = this.quickFilter.trim().toLowerCase();
+        Vector<Vector<String>> out = new Vector<>();
+        for (Vector<String> row : rows) {
+            StringBuilder sb = new StringBuilder();
+            for (String cell : row) sb.append(cell).append(' ');
+            if (sb.toString().toLowerCase().contains(q)) out.add(row);
+        }
+        return out;
+    }
+
+    /** Ctrl+F：按关键字过滤列表（URL/备注/分组等任意列）。 */
+    private void showQuickFilterDialog() {
+        String cur = GOptionPane.showInputDialog(this, "过滤关键字（留空显示全部）", this.quickFilter == null ? "" : this.quickFilter);
+        if (cur == null) return;
+        this.quickFilter = cur;
+        refreshShellViewNow();
+        if (this.operationLogPanel != null) {
+            this.operationLogPanel.appendLine(cur.trim().isEmpty()
+                    ? "[\u8fc7\u6ee4] \u5df2\u6e05\u9664\u8fc7\u6ee4"
+                    : "[\u8fc7\u6ee4] " + cur);
+        }
+    }
+
+    /** 打开选中 Shell 的交互窗口（双击 / Enter 共用）。 */
+    private void openSelectedShell() {
+        if (this.shellView.getSelectedRow() < 0) return;
+        this.interactMenuItemClick(null);
+    }
+
+    public void refreshShellView() {
+        BusyCursor.run(this, () -> refreshShellViewNow());
+    }
+
+    /** 刷新实现：先立即出列表（不含归属地），后台补算归属地，并保持选中与滚动位置。 */
+    private void refreshShellViewNow() {
+        final String[] keepIds = selectedShellIds();
+        final int keepScroll = (this.shellViewScrollPane == null)
+                ? 0 : this.shellViewScrollPane.getVerticalScrollBar().getValue();
+        Vector<Vector<String>> rowsVector = Db.getAllShell();
+        if (rowsVector == null || rowsVector.isEmpty()) {
+            rowsVector = new Vector<Vector<String>>();
+        } else {
+            rowsVector.remove(0);
+        }
+        rowsVector = filterRowsByKind(rowsVector, this.currentKind);
+        rowsVector = applyQuickFilter(rowsVector);
+        for (Vector<String> row : rowsVector) {
+            row.add(""); // 归属地占位，稍后异步填
+        }
         this.shellView.AddRows(rowsVector);
         this.shellView.getModel().fireTableDataChanged();
         WallpaperTableStyle.applyToShellTable(this.shellView);
+        restoreSelection(keepIds, keepScroll);
+        fillIpLocationsAsync();
+        this.refreshKindList();
         this.updateStatusBarText(rowsVector.size());
         if (this.operationLogPanel != null) {
             String ts = new SimpleDateFormat("HH:mm:ss").format(new Date());
             this.operationLogPanel.appendLine(String.format("[%s] \u5df2\u52a0\u8f7d Shell \u5217\u8868: %d", ts, rowsVector.size()));
+        }
+    }
+
+    private static boolean isDatabaseShellUrl(String url) {
+        return url != null && url.regionMatches(true, 0, "jdbc:", 0, 5);
+    }
+
+    private static String rowKind(Vector<String> row) {
+        String url = row.size() > 1 ? row.get(1) : "";
+        if (isDatabaseShellUrl(url)) {
+            return KIND_DB;
+        }
+        return KIND_HTTP;
+    }
+
+    private static String kindFromIndex(int idx) {
+        if (idx == 1) {
+            return KIND_DB;
+        }
+        return KIND_HTTP;
+    }
+
+    private static String kindLabel(String kind) {
+        if (KIND_DB.equals(kind)) {
+            return "\u6570\u636e\u5e93";
+        }
+        return "HTTP(S)";
+    }
+
+    private static Vector<Vector<String>> filterRowsByKind(Vector<Vector<String>> rows, String kind) {
+        Vector<Vector<String>> out = new Vector<Vector<String>>();
+        for (int i = 0; i < rows.size(); i++) {
+            Vector<String> row = rows.get(i);
+            if (kind.equals(rowKind(row))) {
+                out.add(row);
+            }
+        }
+        return out;
+    }
+
+    private void refreshKindList() {
+        if (this.kindModel == null) {
+            return;
+        }
+        int http = 0;
+        int db = 0;
+        Vector<Vector<String>> all = Db.getAllShell();
+        if (all != null && all.size() > 1) {
+            for (int i = 1; i < all.size(); i++) {
+                if (KIND_DB.equals(rowKind(all.get(i)))) {
+                    db++;
+                } else {
+                    http++;
+                }
+            }
+        }
+        String httpLabel = "HTTP(S) (" + http + ")";
+        String dbLabel = "\u6570\u636e\u5e93 (" + db + ")";
+        if (this.kindModel.size() != 2) {
+            this.kindModel.removeAllElements();
+            this.kindModel.addElement(httpLabel);
+            this.kindModel.addElement(dbLabel);
+        } else {
+            this.kindModel.set(0, httpLabel);
+            this.kindModel.set(1, dbLabel);
         }
     }
 
@@ -1344,12 +1868,14 @@ public class MainActivity extends JFrame {
     }
 
     public static JMenuItem registerPluginJMenuItem(JMenuItem menuItem) {
+        SvgIcons.decorate(menuItem);
         return pluginMenu.add(menuItem);
     }
 
     private void registerMcpMenuItem() {
         try {
             JMenuItem mcpItem = new JMenuItem("MCP \u670d\u52a1");
+            SvgIcons.apply(mcpItem, "mcp");
             mcpItem.addActionListener(e -> {
                 try {
                     Class<?> mcpClass = Class.forName("shells.plugins.generic.McpService");
@@ -1385,6 +1911,7 @@ public class MainActivity extends JFrame {
     }
 
     public static JMenu registerJMenu(JMenu menu) {
+        SvgIcons.decorate(menu);
         if (menuBarAboutMenu != null) {
             insertMenuBeforeAbout(menu);
             return menu;
@@ -1427,6 +1954,7 @@ public class MainActivity extends JFrame {
     }
 
     public static JMenuItem registerShellViewJMenuItem(JMenuItem menuItem) {
+        SvgIcons.decorate(menuItem);
         return shellViewPopupMenu.add(menuItem);
     }
 
@@ -1465,20 +1993,11 @@ public class MainActivity extends JFrame {
         }
         try {
             initUi();
-            StartupModeDialog.DbConfig cfg = StartupModeDialog.showDialog();
-            if (cfg == null) { System.exit(0); return; }
-            operatorName = cfg.operatorName;
-            if (cfg.isRemote()) {
-                remoteDbUrl = cfg.dbPath;
-                isRemoteDb = true;
-            }
+            operatorName = System.getProperty("user.name", "operator");
+            isRemoteDb = false;
+            remoteDbUrl = "";
             initStatic();
             Class.forName("core.ApplicationContext", true, Thread.currentThread().getContextClassLoader());
-            if (cfg.isRemote()) {
-                swiitchDb(cfg);
-                ensureAllTables();
-                ensureDefaultData();
-            }
         } catch (Exception e) { Log.error(e); }
         GodzillaObjectInputFilter.installObjectInputFilter();
         MainActivity activity = new MainActivity();
@@ -1546,6 +2065,7 @@ public class MainActivity extends JFrame {
                 try (java.sql.Statement s = c.createStatement()) { s.execute("PRAGMA journal_mode=WAL"); } catch (Exception ignored) {}
             }
             isRemoteDb = true;
+            remoteDbUrl = cfg.dbPath;
             f.set(null, c);
             if (old != null && !old.isClosed()) { try { old.close(); } catch (Exception ex) {} }
             Log.log("Switched Db to: " + cfg.dbPath);

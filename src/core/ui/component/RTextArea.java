@@ -39,6 +39,37 @@ public class RTextArea extends TextEditorPane {
         applyLiteMode();
     }
 
+    /**
+     * RSyntaxTextArea switches drag-and-drop on from its own constructor chain.
+     * JTextComponent.setDragEnabled throws HeadlessException when there is no
+     * display, which made every plugin that declares an RTextArea field
+     * (NewCmd / Mimikatz / TH_TOOLS / Useradd / OaTools / ClassLoader)
+     * impossible to instantiate under the headless MCP server. Nothing can be
+     * dragged without a display, so the call is simply ignored there.
+     */
+    @Override
+    public void setDragEnabled(boolean b) {
+        if (java.awt.GraphicsEnvironment.isHeadless()) {
+            return;
+        }
+        super.setDragEnabled(b);
+    }
+
+    /**
+     * RSyntaxTextArea's constructor calls this to build its find/replace dialog:
+     * registerReplaceDialog -> new LazyValue -> createReplaceDialog ->
+     * ReplaceDialog -> JDialog -> Window, which throws HeadlessException before
+     * the constructor ever returns. The dialog is only reachable from the popup
+     * menu, so there is nothing to register without a display.
+     */
+    @Override
+    public void registerReplaceDialog() {
+        if (java.awt.GraphicsEnvironment.isHeadless()) {
+            return;
+        }
+        super.registerReplaceDialog();
+    }
+
     private void applyLiteMode() {
         this.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_NONE);
         this.setCodeFoldingEnabled(false);

@@ -113,7 +113,7 @@ gsl/
 
 ## 更新日志
 
-### 3.1.8（2026-09-11）
+### 3.1.8（2026-09-14）
 - **JDK 6–17 全兼容**：下发到目标端的字节码全部降至 v50（`payload.classs`、全部 `modules/*.class`、全部插件 `.classs`），JDK 6 / 11 / 17 真机矩阵（真 Tomcat + 真 JSP + HTTP 联调）全部通过；目标端字符集按 `file.encoding` 自动对齐，不再依赖代码页猜测
 - **达梦 / 人大金仓（新）**：内置达梦 DM8 与 KingbaseES V8 的 JDBC 驱动（均编译为 v50，JDK 6 起可用）、数据库类型、连接串与库表 SQL 模板；连接前自动探测目标端 classpath，缺驱动才按需上传。`db_list_types` 与 GUI 数据库下拉同步支持
   - 达梦：驱动 `dm.jdbc.driver.DmDriver`，连接串 `jdbc:dm://主机:端口[/库名]`，**默认端口 5236**
@@ -296,7 +296,8 @@ java -jar bin/gsl5.jar mcp 192.168.1.10:9123
 然后在 Claude / Codex 的 MCP 配置中添加（详见 [MCP 服务](#mcp-服务ai-操控)）。
 
 ### 4. 下载预编译 Release
-- **3.1.7.1（最新）**：生成窗口免弹窗 + 综合插件乱码修复 + 文件管理执行/防连点 + MCP 数据库工具 — [Release](https://github.com/Xaaaa-bip/GodzillaSuper/releases/tag/3.1.7.1) · [jar](https://github.com/Xaaaa-bip/GodzillaSuper/releases/download/3.1.7.1/gsl5.jar)
+- **3.1.8（最新）**：JDK 6–17 全兼容 + 达梦/人大金仓内置 + PHP 无 exec 命令执行 + C2 容器链（PNG/GIF/PDF）修复 + C# 载荷对抗升级 + 界面与快捷键改版 — [Release](https://github.com/Xaaaa-bip/GodzillaSuper/releases/tag/3.1.8) · [jar](https://github.com/Xaaaa-bip/GodzillaSuper/releases/download/3.1.8/gsl5.jar)
+- **3.1.7.1**：生成窗口免弹窗 + 综合插件乱码修复 + 文件管理执行/防连点 + MCP 数据库工具 — [Release](https://github.com/Xaaaa-bip/GodzillaSuper/releases/tag/3.1.7.1) · [jar](https://github.com/Xaaaa-bip/GodzillaSuper/releases/download/3.1.7.1/gsl5.jar)
 - **3.1.7**：C2 流量伪装容器链（PNG/PDF/GIF）+ MCP 免弹窗修复 + 报错弹窗布局修复 — [Release](https://github.com/Xaaaa-bip/GodzillaSuper/releases/tag/3.1.7) · [jar](https://github.com/Xaaaa-bip/GodzillaSuper/releases/download/3.1.7/gsl5.jar)
 - **3.1.6**：口字修复 + 超级混淆解析错误修复 + MCP 生成免弹窗（obfuscation 6 变体）+ 移除 RASP — [Release](https://github.com/Xaaaa-bip/GodzillaSuper/releases/tag/3.1.6) · [jar](https://github.com/Xaaaa-bip/GodzillaSuper/releases/download/3.1.6/gsl5.jar)
 - **3.1.5**：PHP 混淆乱码修复 + MCP 插件工具（`@McpTool` 10 个工具，全部内存加载）+ shell_info 补全— [Release](https://github.com/Xaaaa-bip/GodzillaSuper/releases/tag/3.1.5) · [jar](https://github.com/Xaaaa-bip/GodzillaSuper/releases/download/3.1.5/gsl5.jar)

@@ -134,9 +134,6 @@ public final class IpLocationService {
         if (reader == null) {
             init();
         }
-        if (reader == null) {
-            return COL_HINT_NO_DB;
-        }
         if (HOST_CACHE.size() > 5000) {
             HOST_CACHE.clear();
         }
@@ -148,11 +145,33 @@ public final class IpLocationService {
         if (cached != null) {
             return cached;
         }
-        String ip = resolveHostToIp(host);
+        if (isLoopbackHost(host)) {
+            HOST_CACHE.put(host, "\u56de\u73af");
+            return "\u56de\u73af";
+        }
+        String ip = isLiteralIp(host) ? host : null;
+        if (ip != null) {
+            String special = classifySpecialIp(ip);
+            if (special != null) {
+                HOST_CACHE.put(host, special);
+                return special;
+            }
+        }
+        if (reader == null) {
+            return COL_HINT_NO_DB;
+        }
+        if (ip == null) {
+            ip = resolveHostToIp(host);
+        }
         if (ip == null) {
             String v = COL_HINT_RESOLVE;
             HOST_CACHE.put(host, v);
             return v;
+        }
+        String special = classifySpecialIp(ip);
+        if (special != null) {
+            HOST_CACHE.put(host, special);
+            return special;
         }
         try {
             String[] fields = reader.find(ip, "CN");
@@ -227,20 +246,141 @@ public final class IpLocationService {
         return host.matches("^(\\d{1,3}\\.){3}\\d{1,3}$");
     }
 
+    private static boolean isLoopbackHost(String host) {
+        if (host == null) {
+            return false;
+        }
+        String h = host.trim().toLowerCase();
+        return "localhost".equals(h) || "localhost.localdomain".equals(h);
+    }
+
+    private static String classifySpecialIp(String ip) {
+        if (ip == null || ip.isEmpty()) {
+            return null;
+        }
+        if (ip.indexOf(':') >= 0) {
+            String low = ip.toLowerCase();
+            if ("::1".equals(low) || low.endsWith("::1")) {
+                return "\u56de\u73af";
+            }
+            if (low.startsWith("fe80:") || low.startsWith("fc") || low.startsWith("fd")) {
+                return "\u5c40\u57df\u7f51";
+            }
+            return null;
+        }
+        int[] o = parseIpv4(ip);
+        if (o == null) {
+            return null;
+        }
+        if (o[0] == 127) {
+            return "\u56de\u73af";
+        }
+        if (o[0] == 10
+                || (o[0] == 172 && o[1] >= 16 && o[1] <= 31)
+                || (o[0] == 192 && o[1] == 168)
+                || (o[0] == 169 && o[1] == 254)) {
+            return "\u5c40\u57df\u7f51";
+        }
+        if (o[0] == 0 || o[0] >= 224) {
+            return "\u4fdd\u7559";
+        }
+        return null;
+    }
+
+    private static int[] parseIpv4(String ip) {
+        String[] p = ip.split("\\.");
+        if (p.length != 4) {
+            return null;
+        }
+        try {
+            int[] o = new int[4];
+            for (int i = 0; i < 4; i++) {
+                o[i] = Integer.parseInt(p[i]);
+                if (o[i] < 0 || o[i] > 255) {
+                    return null;
+                }
+            }
+            return o;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private static String formatFields(String[] fields) {
         if (fields == null || fields.length == 0) {
             return "";
         }
-        StringBuilder sb = new StringBuilder();
-        for (String f : fields) {
-            if (f == null || f.isEmpty() || "0".equals(f)) {
+        java.util.ArrayList<String> parts = new java.util.ArrayList<String>();
+        for (String raw : fields) {
+            if (raw == null) {
                 continue;
             }
-            if (sb.length() > 0) {
-                sb.append(' ');
+            String f = raw.trim();
+            if (f.isEmpty() || "0".equals(f) || skipGeoToken(f)) {
+                continue;
             }
-            sb.append(f.trim());
+            if (!parts.isEmpty() && (f.equals(parts.get(parts.size() - 1)) || f.startsWith(parts.get(parts.size() - 1)))) {
+                parts.set(parts.size() - 1, f);
+                continue;
+            }
+            parts.add(f);
         }
-        return sb.length() == 0 ? "" : sb.toString();
+        if (parts.isEmpty()) {
+            return "";
+        }
+        String joined = String.join("", parts);
+        String special = mapSpecialLabel(joined);
+        if (special != null) {
+            return special;
+        }
+        if ("\u4e2d\u56fd".equals(parts.get(0)) || "CN".equalsIgnoreCase(parts.get(0))) {
+            parts.remove(0);
+        }
+        if (parts.isEmpty()) {
+            return "\u4e2d\u56fd";
+        }
+        String a = parts.get(0);
+        if (parts.size() == 1) {
+            return a;
+        }
+        String b = parts.get(1);
+        if (b.equals(a) || b.startsWith(a) || a.startsWith(b)) {
+            return b.length() >= a.length() ? b : a;
+        }
+        return a + b;
+    }
+
+    private static String mapSpecialLabel(String text) {
+        if (text == null || text.isEmpty()) {
+            return null;
+        }
+        String t = text.toLowerCase();
+        if (t.contains("loopback") || text.contains("\u56de\u73af") || text.contains("\u672c\u673a")) {
+            return "\u56de\u73af";
+        }
+        if (t.contains("lan") || text.contains("\u5c40\u57df") || text.contains("\u5185\u7f51")
+                || text.contains("\u79c1\u6709\u7f51\u7edc") || text.contains("\u79c1\u7f51")) {
+            return "\u5c40\u57df\u7f51";
+        }
+        if (t.contains("iana") || t.contains("apnic") || t.contains("ripe")
+                || text.contains("\u4fdd\u7559") || text.contains("\u672a\u5206\u914d")) {
+            return "\u4fdd\u7559";
+        }
+        return null;
+    }
+
+    private static boolean skipGeoToken(String f) {
+        if (f.matches("[-+]?\\d+(\\.\\d+)?")) {
+            return true;
+        }
+        if (f.length() == 2 && f.matches("[A-Za-z]{2}")) {
+            return true;
+        }
+        return "\u7535\u4fe1".equals(f) || "\u8054\u901a".equals(f) || "\u79fb\u52a8".equals(f)
+                || "\u94c1\u901a".equals(f) || "\u6559\u80b2\u7f51".equals(f) || "\u79d1\u6280\u7f51".equals(f)
+                || "\u5e7f\u7535".equals(f) || "\u957f\u57ce".equals(f) || "\u6c5f\u82cf\u6709\u7ebf".equals(f)
+                || "\u963f\u91cc\u4e91".equals(f) || "\u817e\u8baf\u4e91".equals(f) || "\u534e\u4e3a\u4e91".equals(f)
+                || "AWS".equalsIgnoreCase(f) || "Google".equalsIgnoreCase(f) || "Cloudflare".equalsIgnoreCase(f)
+                || f.contains("ISP") || f.contains("Cloud") || f.endsWith("\u516c\u53f8");
     }
 }

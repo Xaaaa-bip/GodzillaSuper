@@ -48,6 +48,8 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
@@ -64,8 +66,11 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextField;
+import javax.swing.RowSorter;
+import javax.swing.SortOrder;
 import javax.swing.SwingUtilities;
 import javax.swing.TransferHandler;
+import javax.swing.table.TableRowSorter;
 import javax.swing.border.Border;
 import javax.swing.border.TitledBorder;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -181,6 +186,7 @@ public class ShellFileManager extends JPanel {
                 this.fileDataTree.AddNote(this.currentDir);
                 this.titledBorder.setTitle(String.format(TITLED_FORMAT, 0, 0, 0));
                 this.jSplitPane2.updateUI();
+                this.refreshFile(this.currentDir);
             });
         }, "gsl5-file-init")).start();
     }
@@ -218,10 +224,14 @@ public class ShellFileManager extends JPanel {
         this.editFileInEditFileFrameButton = new JButton("\u5728\u7f16\u8f91\u5668\u7f16\u8f91\u6b64\u6587\u4ef6");
         this.showImageFileButton = new JButton("\u5728\u65b0\u7a97\u53e3\u663e\u793a\u56fe\u7247");
         this.uploadButton = new JButton("\u4e0a\u4f20");
+        this.uploadButton.setIcon(core.ui.SvgIcons.of("upload"));
         this.refreshButton = new JButton("\u5237\u65b0");
+        this.refreshButton.setIcon(core.ui.SvgIcons.of("refresh"));
         this.moveButton = new JButton("\u79fb\u52a8");
         this.copyFileButton = new JButton("\u590d\u5236");
+        this.copyFileButton.setIcon(core.ui.SvgIcons.of("copy"));
         this.downloadButton = new JButton("\u4e0b\u8f7d");
+        this.downloadButton.setIcon(core.ui.SvgIcons.of("import"));
         this.copyNameButton = new JButton("\u590d\u5236\u7edd\u5bf9\u8def\u5f84");
         this.deleteFileButton = new JButton("\u5220\u9664\u6587\u4ef6");
         this.newFileButton = new JButton("\u65b0\u5efa\u6587\u4ef6");
@@ -230,7 +240,9 @@ public class ShellFileManager extends JPanel {
         this.fileRemoteDownButton = new JButton("\u8fdc\u7a0b\u4e0b\u8f7d");
         this.executeFileButton = new JButton("\u6267\u884c");
         this.bigFileDownloadButton = new JButton("\u5927\u6587\u4ef6\u4e0b\u8f7d");
+        this.bigFileDownloadButton.setIcon(core.ui.SvgIcons.of("import"));
         this.bigFileUploadButton = new JButton("\u5927\u6587\u4ef6\u4e0a\u4f20");
+        this.bigFileUploadButton.setIcon(core.ui.SvgIcons.of("upload"));
         this.toolsPanel.add(this.uploadButton);
         this.toolsPanel.add(this.moveButton);
         this.toolsPanel.add(this.refreshButton);
@@ -516,30 +528,11 @@ public class ShellFileManager extends JPanel {
     }
 
     public void uploadButtonClick(ActionEvent e) {
-        (new Thread(new Runnable() {
-            public void run() {
-                ApplicationContext.isShowHttpProgressBar.set(new Boolean(true));
-                if (ApplicationContext.isGodMode()) {
-                    ShellFileManager.this.GUploadFile(false);
-                } else {
-                    ShellFileManager.this.UploadFile(false);
-                }
-
-            }
-        })).start();
+        this.startUpload(false);
     }
 
     public void bigFileUploadButtonClick(ActionEvent e) {
-        (new Thread(new Runnable() {
-            public void run() {
-                if (ApplicationContext.isGodMode()) {
-                    ShellFileManager.this.GUploadFile(true);
-                } else {
-                    ShellFileManager.this.UploadFile(true);
-                }
-
-            }
-        })).start();
+        this.startUpload(true);
     }
 
     public void refreshButtonClick(ActionEvent e) {
@@ -609,30 +602,11 @@ public class ShellFileManager extends JPanel {
     }
 
     public void downloadButtonClick(ActionEvent e) {
-        (new Thread(new Runnable() {
-            public void run() {
-                ApplicationContext.isShowHttpProgressBar.set(new Boolean(true));
-                if (ApplicationContext.isGodMode()) {
-                    ShellFileManager.this.GDownloadFile(false);
-                } else {
-                    ShellFileManager.this.downloadFile(false);
-                }
-
-            }
-        })).start();
+        this.startDownload(false);
     }
 
     public void bigFileDownloadButtonClick(ActionEvent e) {
-        (new Thread(new Runnable() {
-            public void run() {
-                if (ApplicationContext.isGodMode()) {
-                    ShellFileManager.this.GDownloadFile(true);
-                } else {
-                    ShellFileManager.this.downloadFile(true);
-                }
-
-            }
-        })).start();
+        this.startDownload(true);
     }
 
     public void newDirButtonClick(ActionEvent e) {
@@ -747,6 +721,7 @@ public class ShellFileManager extends JPanel {
                 row.add(sanitizeHtml(file.getPermission()));
                 rows.add(row);
             }
+            sortRowsByType(rows);
         } catch (Throwable var13) {
             var13.printStackTrace();
             final String msg = var13.getMessage();
@@ -767,6 +742,50 @@ public class ShellFileManager extends JPanel {
             this.jSplitPane2.updateUI();
         });
         return rows;
+    }
+
+    private static void sortRowsByType(Vector rows) {
+        if (rows == null || rows.size() < 2) {
+            return;
+        }
+        Collections.sort(rows, new Comparator() {
+            public int compare(Object a, Object b) {
+                Vector ra = (Vector) a;
+                Vector rb = (Vector) b;
+                String ta = rowType(ra);
+                String tb = rowType(rb);
+                int byType = ta.compareToIgnoreCase(tb);
+                if (byType != 0) {
+                    return byType;
+                }
+                return rowName(ra).compareToIgnoreCase(rowName(rb));
+            }
+        });
+    }
+
+    private static String rowType(Vector row) {
+        if (row == null || row.size() <= 2 || row.get(2) == null) {
+            return "";
+        }
+        return String.valueOf(row.get(2));
+    }
+
+    private static String rowName(Vector row) {
+        if (row == null || row.size() <= 1 || row.get(1) == null) {
+            return "";
+        }
+        return String.valueOf(row.get(1));
+    }
+
+    private void applyTypeSort() {
+        TableRowSorter sorter = this.dataView.getSorter();
+        if (sorter == null || sorter.getModel() != this.dataView.getModel()) {
+            sorter = new TableRowSorter(this.dataView.getModel());
+            this.dataView.setSorter(sorter);
+            this.dataView.setRowSorter(sorter);
+        }
+        sorter.setSortKeys(Collections.singletonList(new RowSorter.SortKey(2, SortOrder.ASCENDING)));
+        sorter.sort();
     }
 
     private void runFileIo(Runnable task) {
@@ -802,6 +821,7 @@ public class ShellFileManager extends JPanel {
                         this.dataView.AddRows(rows);
                         this.dataView.getColumnModel().getColumn(0).setMaxWidth(35);
                         this.dataView.getModel().fireTableDataChanged();
+                        this.applyTypeSort();
                     } else if (fail != null) {
                         GOptionPane.showMessageDialog(UiFunction.getParentFrame(this),
                                 "\u6253\u5f00\u5931\u8d25: " + (fail.getMessage() == null ? fail.getClass().getSimpleName() : fail.getMessage()),
@@ -815,33 +835,58 @@ public class ShellFileManager extends JPanel {
         });
     }
 
+    private void startUpload(boolean bigFileUpload) {
+        ApplicationContext.isShowHttpProgressBar.set(Boolean.TRUE);
+        GFileChooser chooser = new GFileChooser();
+        chooser.setTitle("\u9009\u62e9\u8981\u4e0a\u4f20\u7684\u6587\u4ef6");
+        chooser.setApproveButtonText("\u4e0a\u4f20");
+        File local = chooser.showOpenDialog(this);
+        if (local == null) {
+            return;
+        }
+        String destDir = this.currentDir == null ? "" : functions.formatDir(this.currentDir);
+        final String dest = destDir + local.getName();
+        final boolean big = bigFileUpload;
+        (new Thread(() -> this.uploadFile(dest, local, big), "gsl5-upload")).start();
+    }
+
+    private void startDownload(boolean bigFileDownload) {
+        ApplicationContext.isShowHttpProgressBar.set(Boolean.TRUE);
+        String remote = this.getSelectdFile();
+        if (remote == null || remote.trim().length() == 0) {
+            GOptionPane.showMessageDialog(UiFunction.getParentFrame(this), "\u672a\u9009\u4e2d\u4e0b\u8f7d\u6587\u4ef6", "\u63d0\u793a", 2);
+            return;
+        }
+        String name = remote.replace('\\', '/');
+        int slash = name.lastIndexOf('/');
+        name = slash >= 0 ? name.substring(slash + 1) : name;
+        GFileChooser chooser = new GFileChooser();
+        chooser.setTitle("\u4fdd\u5b58\u5230");
+        chooser.setApproveButtonText("\u4fdd\u5b58");
+        chooser.setSelectedFile(name);
+        File local = chooser.showSaveDialog(this);
+        if (local == null) {
+            return;
+        }
+        boolean big = bigFileDownload;
+        try {
+            FileInfo fileInfo = (FileInfo) this.dataView.getValueAt(this.dataView.getSelectedRow(), 4);
+            if (fileInfo != null && fileInfo.getSize() > (long) this.shellEntity.getOnceBigFileDownloadByteNum()) {
+                big = true;
+            }
+        } catch (Exception ignored) {
+        }
+        final boolean useBig = big;
+        final String remoteSrc = remote;
+        (new Thread(() -> this.downloadFile(remoteSrc, local, useBig), "gsl5-download")).start();
+    }
+
     private void GUploadFile(boolean bigFileUpload) {
-        String destHint = this.currentDir == null ? "" : functions.formatDir(this.currentDir);
-        FileOpertionInfo fileOpertionInfo = FileDialog2.showFileOpertion(this.shellEntity.getFrame(), "upload", "", destHint);
-        if (fileOpertionInfo.getOpertionStatus() == null || !fileOpertionInfo.getOpertionStatus().booleanValue()) {
-            return;
-        }
-        String src = fileOpertionInfo.getSrcFileName() == null ? "" : fileOpertionInfo.getSrcFileName().trim();
-        String dest = fileOpertionInfo.getDestFileName() == null ? "" : fileOpertionInfo.getDestFileName().trim();
-        if (src.isEmpty() || dest.isEmpty()) {
-            GOptionPane.showMessageDialog(UiFunction.getParentFrame(this), "\u4e0a\u4f20\u8def\u5f84\u4e3a\u7a7a", "\u63d0\u793a", 2);
-            return;
-        }
-        File local = new File(src);
-        if ((dest.endsWith("/") || dest.endsWith("\\")) && local.getName().length() > 0) {
-            dest = dest + local.getName();
-        }
-        this.uploadFile(dest, local, bigFileUpload);
+        this.startUpload(bigFileUpload);
     }
 
     private void UploadFile(boolean bigFileUpload) {
-        GFileChooser chooser = new GFileChooser();
-        File selectdFile = chooser.showOpenDialog(this);
-        if (selectdFile != null) {
-            String uploadFileString = this.currentDir + selectdFile.getName();
-            this.uploadFile(uploadFileString, selectdFile, bigFileUpload);
-        }
-
+        this.startUpload(bigFileUpload);
     }
 
     public void uploadFile(String uploadFileString, File selectdFile, boolean bigFileUpload) {
@@ -877,39 +922,11 @@ public class ShellFileManager extends JPanel {
     }
 
     private void GDownloadFile(boolean bigFileDownload) {
-        String file = this.getSelectdFile();
-        FileOpertionInfo fileOpertionInfo = FileDialog2.showFileOpertion(this.shellEntity.getFrame(), "download", file, "");
-        if (fileOpertionInfo.getOpertionStatus() == null || !fileOpertionInfo.getOpertionStatus().booleanValue()) {
-            return;
-        }
-        String src = fileOpertionInfo.getSrcFileName() == null ? "" : fileOpertionInfo.getSrcFileName().trim();
-        String dest = fileOpertionInfo.getDestFileName() == null ? "" : fileOpertionInfo.getDestFileName().trim();
-        if (src.isEmpty() || dest.isEmpty()) {
-            GOptionPane.showMessageDialog(UiFunction.getParentFrame(this), "\u4e0b\u8f7d\u8def\u5f84\u4e3a\u7a7a", "\u63d0\u793a", 2);
-            return;
-        }
-        this.downloadFile(src, new File(dest), bigFileDownload);
-
+        this.startDownload(bigFileDownload);
     }
 
     private void downloadFile(boolean bigFileDownload) {
-        GFileChooser chooser = new GFileChooser();
-        chooser.setSelectedFile(this.getSelectdFileName());
-        File selectdFile = chooser.showSaveDialog(this);
-        String srcFile = this.getSelectdFile();
-        if (srcFile != null && srcFile.trim().length() > 0) {
-            if (selectdFile != null) {
-                FileInfo fileInfo = (FileInfo)this.dataView.getValueAt(this.dataView.getSelectedRow(), 4);
-                if (fileInfo.getSize() > (long)this.shellEntity.getOnceBigFileDownloadByteNum()) {
-                    bigFileDownload = true;
-                }
-
-                this.downloadFile(srcFile, selectdFile, bigFileDownload);
-            }
-        } else {
-            GOptionPane.showMessageDialog(UiFunction.getParentFrame(this), "\u672a\u9009\u4e2d\u4e0b\u8f7d\u6587\u4ef6", "\u63d0\u793a", 2);
-        }
-
+        this.startDownload(bigFileDownload);
     }
 
     private void downloadFile(String srcFileString, File destFile, boolean bigFileDownload) {

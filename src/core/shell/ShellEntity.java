@@ -250,9 +250,34 @@ public class ShellEntity {
     public synchronized Encoding getEncodingModule() {
         if (this.encodingModule == null) {
             this.encodingModule = Encoding.getEncoding(this.getEncoding());
+            applyFixedRemoteCharset(this.encodingModule);
         }
 
         return this.encodingModule;
+    }
+
+    /**
+     * 部分 payload 的目标端解码字符集是**协议写死的**，与目标机代码页无关，
+     * 而「encoding」下拉框（以及 chcp 探测）拿到的是代码页。两者一旦分叉，
+     * 所有非 ASCII 的路径/命令都会乱码，所以这里按 payload 类型钉死。
+     *
+     *   AspDynamicPayload     —— payload.asp 用 ADODB.Stream 且 CharSet="utf-8"
+     *   NetCoreDynamicPayload —— payload_core.dll 用 Encoding.UTF8
+     *                            (.NET Core 上 Encoding.Default 本身就是 UTF-8)
+     *
+     * 不在此列的：
+     *   JavaDynamicPayload    —— 跟随目标 JVM 的 file.encoding，
+     *                            JDK 18+ 起固定 UTF-8，由 JavaAShell 从
+     *                            getBasicsInfo() 里读出来动态设置。
+     *   CSharpDynamicPayload  —— .NET Framework 的 Encoding.Default = 系统 ANSI
+     *                            代码页，与 chcp 一致，无需干预。
+     *   PhpDynamicPayload     —— 目标端字节透明，不做解码。
+     */
+    private void applyFixedRemoteCharset(Encoding encodingModule) {
+        String p = this.payload == null ? "" : this.payload;
+        if ("AspDynamicPayload".equals(p) || "NetCoreDynamicPayload".equals(p)) {
+            encodingModule.setRemoteCharset("UTF-8");
+        }
     }
 
     public synchronized String getDbEncoding() {

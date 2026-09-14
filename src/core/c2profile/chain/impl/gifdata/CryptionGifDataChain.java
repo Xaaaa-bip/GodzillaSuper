@@ -157,6 +157,12 @@ public class CryptionGifDataChain extends AbstractC2ProfileCryptionChain {
         byte[] prevEntry = null;
         int assigned = 258;
         while (true) {
+            // Once the bit stream is exhausted every read below returns 0, which is a valid
+            // table index -- the loop would then run forever writing one byte per round and
+            // growing the output without bound. A stream that ends without EOI is truncated.
+            if (bitPos + size > src.length * 8) {
+                throw new IllegalArgumentException("truncated lzw stream in gif");
+            }
             int code = 0;
             for (int i = 0; i < size; i++) {
                 int byteIdx = (bitPos + i) >> 3;

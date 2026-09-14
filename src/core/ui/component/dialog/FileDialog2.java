@@ -13,6 +13,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComponent;
@@ -21,13 +22,11 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import util.automaticBindClick;
 import util.functions;
 
-/**
- * Upload / download / copy path dialog. Ctrl+V works in the fields
- * (MainActivity no longer steals paste from text inputs).
- */
+/** Path dialog for copy / rename / remote-download. Upload and download use GFileChooser. */
 public class FileDialog2 extends JDialog {
     public JTextField srcFileTextField;
     public JTextField destFileTextField;
@@ -51,18 +50,15 @@ public class FileDialog2 extends JDialog {
 
         this.srcFileTextField = new JTextField(srcFile == null ? "" : srcFile, 42);
         this.destFileTextField = new JTextField(destFile == null ? "" : destFile, 42);
-        enableEasyPaste(this.srcFileTextField);
-        enableEasyPaste(this.destFileTextField);
-
         this.srcSelectdFileButton = new JButton("...");
         this.destSelectdFileButton = new JButton("...");
-        this.okButton = new JButton("OK");
-        this.cancelButton = new JButton("CANCEL");
+        this.okButton = new JButton("\u786e\u5b9a");
+        this.cancelButton = new JButton("\u53d6\u6d88");
 
         gc.gridx = 0;
         gc.gridy = 0;
         gc.weightx = 0;
-        form.add(new JLabel(EasyI18N.getI18nString("\u6e90\u6587\u4ef6(srcFile):")), gc);
+        form.add(new JLabel(EasyI18N.getI18nString("\u6e90\u8def\u5f84")), gc);
         gc.gridx = 1;
         gc.weightx = 1;
         form.add(this.srcFileTextField, gc);
@@ -72,21 +68,13 @@ public class FileDialog2 extends JDialog {
 
         gc.gridx = 0;
         gc.gridy = 1;
-        form.add(new JLabel(EasyI18N.getI18nString("\u76ee\u6807\u6587\u4ef6(destFile):")), gc);
+        form.add(new JLabel(EasyI18N.getI18nString("\u76ee\u6807\u8def\u5f84")), gc);
         gc.gridx = 1;
         gc.weightx = 1;
         form.add(this.destFileTextField, gc);
         gc.gridx = 2;
         gc.weightx = 0;
         form.add(this.destSelectdFileButton, gc);
-
-        JLabel hint = new JLabel(EasyI18N.getI18nString("\u8def\u5f84\u53ef\u76f4\u63a5\u7c98\u8d34\uff08Ctrl+V\uff09\uff0cEnter \u786e\u8ba4\uff0cEsc \u53d6\u6d88"));
-        hint.setEnabled(false);
-        gc.gridx = 0;
-        gc.gridy = 2;
-        gc.gridwidth = 3;
-        gc.weightx = 1;
-        form.add(hint, gc);
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         buttons.add(this.okButton);
@@ -100,15 +88,14 @@ public class FileDialog2 extends JDialog {
         this.getRootPane().setDefaultButton(this.okButton);
         this.getRootPane().registerKeyboardAction(e -> cancelButtonClick(null),
                 KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
-
         this.addWindowListener(new WindowAdapter() {
             public void windowClosing(WindowEvent e) {
                 FileDialog2.this.cancelButtonClick(null);
             }
         });
 
-        this.setMinimumSize(new Dimension(720, 180));
-        functions.setWindowSize(this, 820, 190);
+        this.setMinimumSize(new Dimension(640, 160));
+        functions.setWindowSize(this, 720, 170);
         this.setLocationRelativeTo(owner);
         this.setDefaultCloseOperation(2);
         EasyI18N.installObject(this);
@@ -117,17 +104,6 @@ public class FileDialog2 extends JDialog {
 
     public JComponent $$$getRootComponent$$$() {
         return this.corePanel;
-    }
-
-    private static void enableEasyPaste(JTextField field) {
-        field.putClientProperty("JTextField.placeholderText", "");
-        field.addFocusListener(new java.awt.event.FocusAdapter() {
-            public void focusGained(java.awt.event.FocusEvent e) {
-                if (field.getText() != null && !field.getText().isEmpty()) {
-                    field.selectAll();
-                }
-            }
-        });
     }
 
     public FileOpertionInfo getResult() {
@@ -153,17 +129,9 @@ public class FileDialog2 extends JDialog {
 
     private void srcSelectdFileButtonClick(ActionEvent e) {
         GFileChooser chooser = new GFileChooser();
-        boolean save = isDownloadLike();
-        File f = save ? chooser.showSaveDialog(this.corePanel) : chooser.showOpenDialog(this.corePanel);
+        File f = chooser.showOpenDialog(this.corePanel);
         if (f != null) {
             this.srcFileTextField.setText(f.getAbsolutePath());
-            if (this.destFileTextField.getText() == null || this.destFileTextField.getText().trim().isEmpty()
-                    || this.destFileTextField.getText().endsWith("/") || this.destFileTextField.getText().endsWith("\\")) {
-                String dest = this.destFileTextField.getText() == null ? "" : this.destFileTextField.getText().trim();
-                if (dest.endsWith("/") || dest.endsWith("\\")) {
-                    this.destFileTextField.setText(dest + f.getName());
-                }
-            }
         }
     }
 
@@ -175,12 +143,47 @@ public class FileDialog2 extends JDialog {
         }
     }
 
-    private boolean isDownloadLike() {
-        String t = this.getTitle();
-        return t != null && t.toLowerCase().contains("download");
+    public static String joinDest(String dest, String fileName) {
+        if (fileName == null || fileName.trim().length() == 0) {
+            return dest == null ? "" : dest.trim();
+        }
+        String name = fileName.trim();
+        if (dest == null || dest.trim().length() == 0) {
+            return name;
+        }
+        String d = dest.trim();
+        if (d.endsWith("/") || d.endsWith("\\")) {
+            return d + name;
+        }
+        return d;
+    }
+
+    public static String baseName(String path) {
+        if (path == null) {
+            return "";
+        }
+        String p = path.trim().replace('\\', '/');
+        int slash = p.lastIndexOf('/');
+        return slash >= 0 ? p.substring(slash + 1) : p;
     }
 
     public static FileOpertionInfo showFileOpertion(Frame owner, String title, String srcFile, String destFile) {
-        return new FileDialog2(owner, title, srcFile, destFile).getResult();
+        return showFileOpertion(owner, title, srcFile, destFile, false);
+    }
+
+    public static FileOpertionInfo showFileOpertion(Frame owner, String title, String srcFile, String destFile, boolean bigFile) {
+        if (SwingUtilities.isEventDispatchThread()) {
+            return new FileDialog2(owner, title, srcFile, destFile).getResult();
+        }
+        AtomicReference<FileOpertionInfo> ref = new AtomicReference<FileOpertionInfo>();
+        try {
+            SwingUtilities.invokeAndWait(() ->
+                    ref.set(new FileDialog2(owner, title, srcFile, destFile).getResult()));
+        } catch (Exception e) {
+            FileOpertionInfo fail = new FileOpertionInfo();
+            fail.setOpertionStatus(Boolean.FALSE);
+            return fail;
+        }
+        return ref.get() != null ? ref.get() : new FileOpertionInfo();
     }
 }

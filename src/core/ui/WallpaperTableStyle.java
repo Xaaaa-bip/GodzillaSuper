@@ -50,27 +50,39 @@ public final class WallpaperTableStyle {
             return;
         }
         Color tb = UIManager.getColor("Table.background");
-        if (tb != null) {
-            table.setBackground(new Color(tb.getRed(), tb.getGreen(), tb.getBlue(), 18));
-        } else {
-            table.setBackground(new Color(255, 255, 255, 18));
+        // 没有壁纸时不需要半透明包装：直接用不透明主题色，省掉每格一次 alpha 合成（滚动更顺）
+        boolean translucent = true;
+        try {
+            translucent = !core.ui.WallpaperManager.getStoredPathOrEmpty().isEmpty();
+        } catch (Throwable ignored) {
         }
-        table.setOpaque(false);
+        if (tb != null) {
+            table.setBackground(translucent ? new Color(tb.getRed(), tb.getGreen(), tb.getBlue(), 18) : tb);
+        } else {
+            table.setBackground(translucent ? new Color(255, 255, 255, 18) : Color.WHITE);
+        }
+        table.setOpaque(!translucent);
 
         TableColumnModel cm = table.getColumnModel();
         for (int i = 0; i < cm.getColumnCount(); i++) {
             TableColumn col = cm.getColumn(i);
             TableCellRenderer r = col.getCellRenderer();
+            TableCellRenderer base;
             if (r instanceof TranslucentCellWrapper) {
-                continue;
+                base = ((TranslucentCellWrapper) r).delegate;
+            } else if (r != null) {
+                base = r;
+            } else {
+                base = new DefaultTableCellRenderer();
             }
-            TableCellRenderer base = r;
-            if (base == null) {
-                DefaultTableCellRenderer d = new DefaultTableCellRenderer();
-                d.setHorizontalAlignment(SwingConstants.LEADING);
-                base = d;
+            if (base instanceof DefaultTableCellRenderer) {
+                ((DefaultTableCellRenderer) base).setHorizontalAlignment(SwingConstants.CENTER);
             }
-            col.setCellRenderer(new TranslucentCellWrapper(base));
+            if (translucent && !(r instanceof TranslucentCellWrapper)) {
+                col.setCellRenderer(new TranslucentCellWrapper(base));
+            } else if (!translucent && r instanceof TranslucentCellWrapper) {
+                col.setCellRenderer(base);
+            }
         }
 
         JTableHeader header = table.getTableHeader();
@@ -82,6 +94,10 @@ public final class WallpaperTableStyle {
                 header.setBackground(new Color(240, 240, 240, 110));
             }
             header.setOpaque(false);
+            TableCellRenderer hr = header.getDefaultRenderer();
+            if (hr instanceof DefaultTableCellRenderer) {
+                ((DefaultTableCellRenderer) hr).setHorizontalAlignment(SwingConstants.CENTER);
+            }
         }
     }
 }

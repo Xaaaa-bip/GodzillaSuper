@@ -41,8 +41,13 @@ public class FileUploadModule {
                     parentDir.mkdirs();
                 }
                 
-                try (FileOutputStream fos = new FileOutputStream(file)) {
+                // JDK 1.6: no try-with-resources.
+                FileOutputStream fos = null;
+                try {
+                    fos = new FileOutputStream(file);
                     fos.write(fileData);
+                } finally {
+                    if (fos != null) { try { fos.close(); } catch (Exception ignored) {} }
                 }
                 
                 return "ok".getBytes();

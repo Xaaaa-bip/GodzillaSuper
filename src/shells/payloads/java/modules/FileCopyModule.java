@@ -44,12 +44,18 @@ public class FileCopyModule {
                     parentDir.mkdirs();
                 }
                 
-                try (FileInputStream fis = new FileInputStream(srcFile);
-                     FileOutputStream fos = new FileOutputStream(destFile);
-                     FileChannel srcChannel = fis.getChannel();
-                     FileChannel destChannel = fos.getChannel()) {
-                    
+                // JDK 1.6: no try-with-resources.
+                FileInputStream fis = null;
+                FileOutputStream fos = null;
+                try {
+                    fis = new FileInputStream(srcFile);
+                    fos = new FileOutputStream(destFile);
+                    FileChannel srcChannel = fis.getChannel();
+                    FileChannel destChannel = fos.getChannel();
                     destChannel.transferFrom(srcChannel, 0, srcChannel.size());
+                } finally {
+                    if (fis != null) { try { fis.close(); } catch (Exception ignored) {} }
+                    if (fos != null) { try { fos.close(); } catch (Exception ignored) {} }
                 }
                 
                 return "ok".getBytes();

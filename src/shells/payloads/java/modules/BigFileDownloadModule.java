@@ -163,22 +163,27 @@ public class BigFileDownloadModule {
                 if (positionString != null && readByteNumString != null && file.exists()) {
                     long position = Long.parseLong(positionString);
                     int readByteNum = Integer.parseInt(readByteNumString);
-                    try (RandomAccessFile raf = new RandomAccessFile(file, "r")) {
+                    // JDK 1.6: no try-with-resources.
+                    RandomAccessFile raf = null;
+                    try {
+                        raf = new RandomAccessFile(file, "r");
                         if (position > raf.length()) {
                             return new byte[0];
                         }
-                        
+
                         raf.seek(position);
                         byte[] buffer = new byte[readByteNum];
                         int bytesRead = raf.read(buffer);
-                        
+
                         if (bytesRead < readByteNum) {
                             byte[] result = new byte[bytesRead];
                             System.arraycopy(buffer, 0, result, 0, bytesRead);
                             return result;
                         }
-                        
+
                         return buffer;
+                    } finally {
+                        if (raf != null) { try { raf.close(); } catch (Exception ignored) {} }
                     }
                 }
             }

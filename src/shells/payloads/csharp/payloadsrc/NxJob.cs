@@ -433,6 +433,10 @@ namespace Nx
 		private static string Why(string msg, string name, byte[] bin, Exception ex)
 		{
 			string s = msg;
+			// Read live, not from Amsi.Status(): that string is formatted inside Ensure(),
+			// i.e. *before* the load was attempted, so its hit count can never say whether
+			// the failed load itself was intercepted.
+			s += "\n[load] hwbp-hits=" + Hwbp.Hits;
 			s += "\n[load] codeName=" + name + " binCode=" + (bin == null ? "null" : bin.Length.ToString()) + " bytes";
 			s += "\n[load] telemetry=" + Etw.Status();
 			s += "\n[load] amsi=" + Amsi.Status();

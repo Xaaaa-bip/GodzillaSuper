@@ -89,11 +89,11 @@ public final class WallpaperTableStyle {
         if (header != null) {
             Color hb = UIManager.getColor("TableHeader.background");
             if (hb != null) {
-                header.setBackground(new Color(hb.getRed(), hb.getGreen(), hb.getBlue(), 110));
+                header.setBackground(translucent ? new Color(hb.getRed(), hb.getGreen(), hb.getBlue(), 110) : hb);
             } else {
-                header.setBackground(new Color(240, 240, 240, 110));
+                header.setBackground(translucent ? new Color(240, 240, 240, 110) : new Color(0xf4f4f5));
             }
-            header.setOpaque(false);
+            header.setOpaque(!translucent);
             TableCellRenderer hr = header.getDefaultRenderer();
             if (hr instanceof DefaultTableCellRenderer) {
                 ((DefaultTableCellRenderer) hr).setHorizontalAlignment(SwingConstants.CENTER);

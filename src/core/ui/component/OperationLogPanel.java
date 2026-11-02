@@ -21,9 +21,9 @@ import javax.swing.border.EmptyBorder;
  */
 public class OperationLogPanel extends JPanel {
 
-    private static final Color HEADER_FG = new Color(0x1e1b4b);
-    private static final Color HEADER_BORDER = new Color(196, 181, 253);
-    private static final Color LOG_BG = new Color(0x0c0c0e);
+    private static final Color HEADER_FG = new Color(0x334155);
+    private static final Color HEADER_BORDER = new Color(0xd4d4d8);
+    private static final Color LOG_BG = new Color(0x111317);
     private static final Color LOG_FG = new Color(0xe4e4e7);
     private static final Color LOG_ACCENT_DIM = new Color(0x64748b);
 
@@ -118,12 +118,12 @@ public class OperationLogPanel extends JPanel {
         lastScale = Math.max(0.90f, Math.min(1.16f, scale));
         float s = lastScale;
         int gapH = Math.round(10 * s);
-        int gapV = Math.round(6 * s);
+        int gapV = Math.round(4 * s);
         headerInner.setLayout(new FlowLayout(FlowLayout.LEFT, gapH, gapV));
-        int margin = Math.round(12 * s);
+        int marginH = Math.round(4 * s);
         headerBar.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, 0, 1, 0, HEADER_BORDER),
-                new EmptyBorder(margin, margin, margin, margin)));
+                BorderFactory.createMatteBorder(1, 0, 1, 0, HEADER_BORDER),
+                new EmptyBorder(1, marginH, 1, marginH)));
         Font base = UIManager.getFont("Label.font");
         int titleSize = base != null
                 ? Math.max(12, Math.round(base.getSize() * s * 1.02f))

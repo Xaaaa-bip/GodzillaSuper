@@ -2714,6 +2714,8 @@ public class McpService implements Plugin {
                 case 3306: dbInfo.setDatabaseType("mysql"); break;
                 case 1521: dbInfo.setDatabaseType("oracle"); break;
                 case 5432: dbInfo.setDatabaseType("postgresql"); break;
+                case 5236: dbInfo.setDatabaseType("dm"); break;
+                case 54321: dbInfo.setDatabaseType("kingbase"); break;
                 default: break;
             }
         }
@@ -3076,6 +3078,8 @@ public class McpService implements Plugin {
             case "oracle": return 1521;
             case "postgresql": return 5432;
             case "sqlite": return 0;
+            case "dm": case "dameng": return 5236;      // 达梦 DM8 默认端口
+            case "kingbase": case "kes": return 54321;  // 人大金仓 KingbaseES 默认端口
             default: return 3306;
         }
     }

@@ -27,23 +27,23 @@ public class AuroraBarPanel extends JPanel {
         HEADER_LIGHT
     }
 
-    private static final Color HEADER_SOLID = new Color(0xf8fafc);
+    private static final Color HEADER_SOLID = new Color(0xf4f4f5);
 
     private static final Color[] STATUS_COLORS = {
-            new Color(0x1e1b4b),
-            new Color(0x5b21b6),
-            new Color(0x0e7490),
-            new Color(0x9d174d),
-            new Color(0x1d4ed8),
-            new Color(0x312e81)
+            new Color(0x1e293b),
+            new Color(0x273549),
+            new Color(0x1e293b),
+            new Color(0x273549),
+            new Color(0x1e293b),
+            new Color(0x273549)
     };
     private static final Color[] HEADER_COLORS = {
-            new Color(0xfae8ff),
-            new Color(0xe0e7ff),
-            new Color(0xcffafe),
-            new Color(0xfef9c3),
-            new Color(0xfce7f3),
-            new Color(0xddd6fe)
+            new Color(0xf4f4f5),
+            new Color(0xefefef),
+            new Color(0xf4f4f5),
+            new Color(0xefefef),
+            new Color(0xf4f4f5),
+            new Color(0xefefef)
     };
 
     private final Variant variant;

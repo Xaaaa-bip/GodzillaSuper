@@ -57,6 +57,7 @@
 - 达梦 DM8 / 人大金仓 KingbaseES 数据库支持，内置驱动按需上传（3.1.8）
 - PHP 无 exec 环境命令执行（FastCGI 连本机 php-fpm，不依赖被禁函数）（3.1.8）
 - JDK 6–17 目标端全兼容（下发字节码统一 v50）（3.1.8）
+- 内存马 `tomcat.jar`（与 `spring.jar` 同款 agent 流程，自注入）（3.1.8.1）
 
 **修复**：
 - PHP 混淆乱码、DisplayName 中文乱码（PHP/JSP/C# 连带修复，3.1.5）
@@ -112,6 +113,14 @@ gsl/
 ---
 
 ## 更新日志
+
+### 3.1.8.1（2026-11-03）
+- **内存马模板**：移除必挂的 `agent.jar`（`agent.javax` 的 `{code}` 占位符无任何实现，生成必报「内存马模板 Java 编译失败」）；新增 `tomcat.jar`（与 `spring.jar` 同款 agent 流程——编译产物替换进预置 agent 资源、整包随机化，`premain` / `agentmain` 双挂载，Valve 自注入）
+- **PHP 超级终端**：修复「超级终端响应超时后命令执行卡死」——服务端 `start` 循环靠 `ignore_user_abort` 永生，看门狗既不落盘又自喂（`lastReadTime` 由循环自己刷新），客户端放弃后僵尸循环占满 FPM worker 与 session 文件锁，导致同 shell 的所有命令执行卡死；改为客户端轮询喂狗、停喂超 10 秒自动清理
+- **PHP 数据库编码**：`dbCharset=Auto` 原样传给 `set_charset("Auto")` 导致连库失败，现单点归一为 `utf8`；顺带修复 `mysqliEx` 路径 `mysqli_set_charset` 缺连接参数（charset 从未生效）
+- **生成对话框后缀 `.null`**：修复 4 个加密器（`TCP_RAW` / `MYSQL_GZIP` / `CSHARP_MSSQL_AES_RAW` / `JAVA_ORACLE_XOR_RAW`）因反编译重建把 `null` 关键字渲染成字符串 `"null"`，导致后缀下拉出现 `.null`
+- **界面调优**：表格网格线、状态栏与 Aurora 渐变配色、Shell 状态栏显示备注标签
+- **移除 NodeJS 载荷**：本次不随发布提供
 
 ### 3.1.8（2026-09-14）
 - **JDK 6–17 全兼容**：下发到目标端的字节码全部降至 v50（`payload.classs`、全部 `modules/*.class`、全部插件 `.classs`），JDK 6 / 11 / 17 真机矩阵（真 Tomcat + 真 JSP + HTTP 联调）全部通过；目标端字符集按 `file.encoding` 自动对齐，不再依赖代码页猜测
@@ -296,7 +305,8 @@ java -jar bin/gsl5.jar mcp 192.168.1.10:9123
 然后在 Claude / Codex 的 MCP 配置中添加（详见 [MCP 服务](#mcp-服务ai-操控)）。
 
 ### 4. 下载预编译 Release
-- **3.1.8（最新）**：JDK 6–17 全兼容 + 达梦/人大金仓内置 + PHP 无 exec 命令执行 + C2 容器链（PNG/GIF/PDF）修复 + C# 载荷对抗升级 + 界面与快捷键改版 — [Release](https://github.com/Xaaaa-bip/GodzillaSuper/releases/tag/3.1.8) · [jar](https://github.com/Xaaaa-bip/GodzillaSuper/releases/download/3.1.8/gsl5.jar)
+- **3.1.8.1（最新）**：内存马 `tomcat.jar` + PHP 超级终端/数据库编码修复 + 生成后缀 `.null` 修复 + 界面调优（移除 NodeJS 载荷） — [Release](https://github.com/Xaaaa-bip/GodzillaSuper/releases/tag/3.1.8.1) · [jar](https://github.com/Xaaaa-bip/GodzillaSuper/releases/download/3.1.8.1/gsl5.jar)
+- **3.1.8**：JDK 6–17 全兼容 + 达梦/人大金仓内置 + PHP 无 exec 命令执行 + C2 容器链（PNG/GIF/PDF）修复 + C# 载荷对抗升级 + 界面与快捷键改版 — [Release](https://github.com/Xaaaa-bip/GodzillaSuper/releases/tag/3.1.8) · [jar](https://github.com/Xaaaa-bip/GodzillaSuper/releases/download/3.1.8/gsl5.jar)
 - **3.1.7.1**：生成窗口免弹窗 + 综合插件乱码修复 + 文件管理执行/防连点 + MCP 数据库工具 — [Release](https://github.com/Xaaaa-bip/GodzillaSuper/releases/tag/3.1.7.1) · [jar](https://github.com/Xaaaa-bip/GodzillaSuper/releases/download/3.1.7.1/gsl5.jar)
 - **3.1.7**：C2 流量伪装容器链（PNG/PDF/GIF）+ MCP 免弹窗修复 + 报错弹窗布局修复 — [Release](https://github.com/Xaaaa-bip/GodzillaSuper/releases/tag/3.1.7) · [jar](https://github.com/Xaaaa-bip/GodzillaSuper/releases/download/3.1.7/gsl5.jar)
 - **3.1.6**：口字修复 + 超级混淆解析错误修复 + MCP 生成免弹窗（obfuscation 6 变体）+ 移除 RASP — [Release](https://github.com/Xaaaa-bip/GodzillaSuper/releases/tag/3.1.6) · [jar](https://github.com/Xaaaa-bip/GodzillaSuper/releases/download/3.1.6/gsl5.jar)

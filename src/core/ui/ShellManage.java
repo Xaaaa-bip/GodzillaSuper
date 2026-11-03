@@ -65,13 +65,14 @@ public class ShellManage extends JFrame {
     public ShellManage(ShellEntity shellEntity) {
         this.shellEntity = shellEntity;
         this.tabbedPane = new RTabbedPane();
+        String remark = this.shellEntity.getRemark();
+        String label = (remark == null || remark.trim().isEmpty()) ? this.shellEntity.getId() : remark.trim();
         String titleString = String.format(
-                "Url:%s Payload:%s Cryption:%s openCache:%s useCache:%s",
+                "Shell: %s \u2014 %s  [%s / %s]",
+                label,
                 this.shellEntity.getUrl(),
                 this.shellEntity.getPayload(),
-                this.shellEntity.getCryption(),
-                shellEntity.isUseCache() ? false : ApplicationContext.isOpenCache(),
-                shellEntity.isUseCache());
+                this.shellEntity.getCryption());
         this.setTitle(titleString);
         this.add(this.loadLabel);
         functions.setWindowSize((Window) this, (int) 1700, (int) 680);

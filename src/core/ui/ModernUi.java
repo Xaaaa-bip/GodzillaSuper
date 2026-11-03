@@ -35,7 +35,7 @@ public final class ModernUi {
 
     public static final Color ACCENT = new Color(0x3b82f6);
     public static final Color ACCENT_MUTED = new Color(0x60a5fa);
-    public static final Color STATUS_BAR_BG = new Color(0x0f172a);
+    public static final Color STATUS_BAR_BG = new Color(0x1e293b);
     public static final Color STATUS_BAR_FG = new Color(0xf8fafc);
 
     private ModernUi() {
@@ -46,7 +46,7 @@ public final class ModernUi {
     }
 
     public static boolean isAuroraGradientEnabled() {
-        return Boolean.parseBoolean(Db.tryGetSetingValue(SETTING_AURORA_GRADIENT, "true"));
+        return Boolean.parseBoolean(Db.tryGetSetingValue(SETTING_AURORA_GRADIENT, "false"));
     }
 
     /** 开合动效，默认关闭（只有显式存过 "true" 才开启）。 */
@@ -113,19 +113,21 @@ public final class ModernUi {
         UIManager.put("ScrollBar.width", 12);
         UIManager.put("ScrollBar.thumbArc", 999);
         UIManager.put("ScrollBar.trackArc", 999);
-        UIManager.put("Table.showHorizontalLines", false);
-        UIManager.put("Table.showVerticalLines", false);
-        UIManager.put("Table.intercellSpacing", new Dimension(0, 2));
+        UIManager.put("Table.showHorizontalLines", true);
+        UIManager.put("Table.showVerticalLines", true);
+        UIManager.put("Table.intercellSpacing", new Dimension(1, 1));
         UIManager.put("Table.rowHeight", 28);
         UIManager.put("Table.selectionBackground", new Color(0x3b82f6));
         UIManager.put("Table.selectionForeground", Color.WHITE);
         UIManager.put("Table.selectionInactiveBackground", new Color(0x94a3b8));
         UIManager.put("Table.selectionInactiveForeground", Color.WHITE);
         UIManager.put("TableHeader.height", 30);
-        UIManager.put("TableHeader.separatorColor", new Color(0xe2e8f0));
+        UIManager.put("TableHeader.separatorColor", new Color(0xd4d4d8));
+        UIManager.put("TableHeader.bottomSeparatorColor", new Color(0xd4d4d8));
         UIManager.put("MenuBar.borderColor", new Color(0xe2e8f0));
         UIManager.put("Separator.stripeWidth", 1);
-        UIManager.put("TabbedPane.showTabSeparators", false);
+        UIManager.put("TabbedPane.showTabSeparators", true);
+        UIManager.put("TabbedPane.tabSeparatorsFullHeight", true);
         UIManager.put("Component.focusWidth", 1);
     }
 }

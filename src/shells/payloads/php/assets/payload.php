@@ -678,6 +678,15 @@ function execSql(){
     $execType=get("execType");
     $sql=get("execSql");
     $charset=get("dbCharset");
+    if ($charset!=null){
+        $charset=trim($charset);
+        // "Auto" is a client-side placeholder: resolve it here so backend
+        // drivers never receive a bogus charset name (set_charset("Auto")
+        // fails and used to break the whole db connection).
+        if (strcasecmp($charset,"auto")==0){
+            $charset="utf8";
+        }
+    }
     $currentDb=get("currentDb");
     function  mysqli_exec($host,$port,$username,$password,$connectString,$execType,$sql,$charset,$currentDb){
         $conn = new mysqli($host,$username,$password,"",$port);
@@ -782,7 +791,7 @@ function execSql(){
         }
 
         if (!empty($charset)){
-            @mysqli_set_charset($charset);
+            @mysqli_set_charset($T,$charset);
         }
         if (!empty($currentDb)){
             @mysqli_select_db($T,$currentDb);
@@ -881,7 +890,8 @@ function execSql(){
             $dbConfig["Database"]=$currentDb;
         }
         if (!empty($charset)){
-            $dbConfig["CharacterSet"]=$charset;
+            // sqlsrv driver expects the exact spelling "UTF-8"
+            $dbConfig["CharacterSet"]=(strcasecmp($charset,"utf8")==0)?"UTF-8":$charset;
         }
         $host .=", ".$port;
 
